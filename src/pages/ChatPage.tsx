@@ -189,7 +189,7 @@ const ChatPage = () => {
                 <div className="flex-1 min-w-0">
                   <div className="mb-1">
                     <span className="text-sm font-medium text-gray-700">
-                      {message.role === 'user' ? 'You' : 'Assistant'}
+                      {message.role === 'user' ? 'You' : 'Wise Guy'}
                     </span>
                   </div>
                   

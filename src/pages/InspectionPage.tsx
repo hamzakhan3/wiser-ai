@@ -9,7 +9,7 @@ import { ArrowLeft, ChevronDown, ChevronUp, Sparkles, User, Bot } from 'lucide-r
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChatPromptBar } from '@/components/ChatPromptBar';
 import { WorkOrderForm } from '@/components/WorkOrderForm';
-import { sendQuery, fetchInspectionData, InspectionFilters, GraphData } from '@/services/apiService';
+import { sendQuery, fetchInspectionData, InspectionFilters, GraphData, streamResponse } from '@/services/apiService';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReactNode } from 'react';
@@ -18,6 +18,9 @@ interface Message {
   role: 'user' | 'system';
   content: string;
   format?: 'markdown' | 'text';
+  id?: string;
+  isStreaming?: boolean;
+  cursor?: string;
 }
 
 const InspectionPage = () => {
@@ -106,41 +109,80 @@ const InspectionPage = () => {
       setIsGraphExpanded(false);
     }
     
+    // Add a placeholder message for streaming
+    const messageId = Date.now().toString();
+    setMessages(prev => [
+      ...prev, 
+      { 
+        role: 'system', 
+        content: '',
+        id: messageId,
+        isStreaming: true,
+        format: 'markdown'
+      }
+    ]);
+    
     try {
-      // Pass machine_id when available for anomaly inspection queries
-      const response = await sendQuery(message, 'anomaly', filters.machineId);
-      console.log('Query response:', response);
+      let streamedContent = '';
       
-      // Add system response
-      setMessages(prev => [
-        ...prev, 
-        { 
-          role: 'system', 
-          content: response.response || "I'm sorry, I couldn't process that request.",
-          format: response.format || 'markdown'
+      await streamResponse(
+        message,
+        // onChar callback
+        (char: string) => {
+          streamedContent += char;
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, content: streamedContent }
+                : msg
+            )
+          );
+        },
+        // onCursor callback
+        (cursor: string) => {
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, cursor: cursor }
+                : msg
+            )
+          );
+        },
+        // onComplete callback
+        () => {
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, isStreaming: false, cursor: '' }
+                : msg
+            )
+          );
+          setIsQueryLoading(false);
         }
-      ]);
-      
-      // Removed all toast notifications for successful queries
+      );
     } catch (error) {
       console.error('Failed to send query:', error);
       
-      // Add error message to chat
-      setMessages(prev => [
-        ...prev, 
-        { 
-          role: 'system', 
-          content: `I couldn't process your question about "${message}". This is a simulated response as the backend is unavailable.`,
-          format: 'markdown'
-        }
-      ]);
+      // Update the message with error content
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === messageId 
+            ? { 
+                ...msg, 
+                content: `I couldn't process your question about "${message}". This is a simulated response as the backend is unavailable.`,
+                isStreaming: false,
+                cursor: ''
+              }
+            : msg
+        )
+      );
       
       toast({
         title: "Query Failed",
         description: "Could not process your question. Using simulated response.",
         variant: "destructive",
       });
-    } finally {
+      
       setIsQueryLoading(false);
     }
   };
@@ -641,15 +683,9 @@ const InspectionPage = () => {
                         </div>
                       ))}
                       
-                      {isQueryLoading && (
+                      {isQueryLoading && !messages.some(msg => msg.isStreaming && msg.content) && (
                         <div className="flex gap-4 items-start">
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-600 text-white">
-                            <Bot size={16} />
-                          </div>
                           <div className="flex-1 min-w-0">
-                            <div className="mb-1">
-                              <span className="text-sm font-medium text-gray-700">Wise Guy</span>
-                            </div>
                             <div className="flex items-center gap-2">
                               <div className="flex gap-1">
                                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
