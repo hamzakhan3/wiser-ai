@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SendIcon, ArrowLeft, User, Bot } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { sendQuery, QueryResponse } from '@/services/apiService';
+import { sendQuery, QueryResponse, streamResponse } from '@/services/apiService';
 import { toast } from '@/hooks/use-toast';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -23,6 +23,9 @@ interface Message {
   statusChart?: any;
   asciiChart?: string;
   chartType?: string;
+  id?: string;
+  isStreaming?: boolean;
+  cursor?: string;
 }
 
 const ChatPage = () => {
@@ -45,40 +48,95 @@ const ChatPage = () => {
 
   const handleQueryBackend = async (query: string) => {
     setIsLoading(true);
+    
+    // Add a placeholder message for streaming
+    const messageId = Date.now().toString();
+    setMessages(prev => [
+      ...prev, 
+      { 
+        role: 'system', 
+        content: '',
+        id: messageId,
+        isStreaming: true
+      }
+    ]);
+    
     try {
-      const response = await sendQuery(query, 'chat-page');
+      let streamedContent = '';
       
-      setMessages(prev => [
-        ...prev, 
-        { 
-          role: 'system', 
-          content: response.response || "I'm sorry, I couldn't process that request.",
-          format: response.format || 'markdown',
-          chartData: response.chart_data,
-          statusChart: response.status_chart,
-          asciiChart: response.ascii_chart,
-          chartType: response.chart_type
+      await streamResponse(
+        query,
+        // onChar callback
+        (char: string) => {
+          streamedContent += char;
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, content: streamedContent }
+                : msg
+            )
+          );
+        },
+        // onCursor callback
+        (cursor: string) => {
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, cursor: cursor }
+                : msg
+            )
+          );
+        },
+        // onComplete callback
+        () => {
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, isStreaming: false, cursor: '' }
+                : msg
+            )
+          );
+          setIsLoading(false);
         }
-      ]);
+      );
     } catch (error) {
-      console.error('Error querying the backend:', error);
+      console.error('Error streaming response:', error);
       
-      toast({
-        title: "Backend Error",
-        description: "Failed to get a response from the backend. Using simulated response instead.",
-        variant: "destructive"
-      });
-      
-      // Fallback to simulated response if backend call fails
-      setMessages(prev => [
-        ...prev, 
-        { 
-          role: 'system', 
-          content: `Here's some information about "${query}". This is a simulated response as this is a prototype or the backend is unavailable.`,
-          format: 'markdown'
-        }
-      ]);
-    } finally {
+      // Fallback to regular query if streaming fails
+      try {
+        const response = await sendQuery(query, 'chat-page');
+        
+        setMessages(prev => [
+          ...prev.filter(msg => msg.id !== messageId),
+          { 
+            role: 'system', 
+            content: response.response || "I'm sorry, I couldn't process that request.",
+            format: response.format || 'markdown',
+            chartData: response.chart_data,
+            statusChart: response.status_chart,
+            asciiChart: response.ascii_chart,
+            chartType: response.chart_type
+          }
+        ]);
+      } catch (fallbackError) {
+        console.error('Error with fallback query:', fallbackError);
+        
+        toast({
+          title: "Backend Error",
+          description: "Failed to get a response from the backend. Using simulated response instead.",
+          variant: "destructive"
+        });
+        
+        // Final fallback to simulated response
+        setMessages(prev => [
+          ...prev.filter(msg => msg.id !== messageId),
+          { 
+            role: 'system', 
+            content: `Here's some information about "${query}". This is a simulated response as this is a prototype or the backend is unavailable.`,
+            format: 'markdown'
+          }
+        ]);
+      }
       setIsLoading(false);
     }
   };
@@ -211,9 +269,17 @@ const ChatPage = () => {
                         }}
                       >
                         {message.content}
+                        {message.isStreaming && message.cursor && (
+                          <span className="animate-pulse text-blue-500">{message.cursor}</span>
+                        )}
                       </ReactMarkdown>
                     ) : (
-                      <p className="text-gray-700 leading-relaxed">{message.content}</p>
+                      <p className="text-gray-700 leading-relaxed">
+                        {message.content}
+                        {message.isStreaming && message.cursor && (
+                          <span className="animate-pulse text-blue-500">{message.cursor}</span>
+                        )}
+                      </p>
                     )}
                     
                     {/* Render Charts if available */}
@@ -229,15 +295,9 @@ const ChatPage = () => {
               </div>
             ))}
             
-            {isLoading && (
+            {isLoading && !messages.some(msg => msg.isStreaming && msg.content) && (
               <div className="flex gap-4 items-start">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-600 text-white">
-                  <Bot size={16} />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="mb-1">
-                    <span className="text-sm font-medium text-gray-700">Assistant</span>
-                  </div>
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1">
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>

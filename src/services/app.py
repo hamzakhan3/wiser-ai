@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import json
 from sqlalchemy import create_engine
 from llama_index.core.indices.struct_store.sql import SQLDatabase
 from llama_index.core.query_engine import NLSQLTableQueryEngine
@@ -79,7 +80,7 @@ sql_database = SQLDatabase(
 # Now create the query engine with the PostgreSQL database
 query_engine = NLSQLTableQueryEngine(
     sql_database=sql_database, 
-    tables=["machine_current_log", "lab", "users", "node", "machine", "lab_user", "current_sensor", "daily_machine_health", "shift_machine_production"], 
+    tables=["lab", "users", "node", "machine", "lab_user", "current_sensor", "daily_machine_health", "shift_machine_production"], 
     llm=None,
     verbose=False  # Disable verbose for better performance
 )
@@ -689,6 +690,81 @@ def handle_text_query(query_str, response_format):
 
 
     
+@app.route('/stream', methods=['POST'])
+def stream_response():
+    """Stream AI model response with typing effect"""
+    try:
+        data = request.get_json()
+        query = data.get('query', '')
+        
+        print(f"🎯 STREAMING REQUEST: {query}")
+        
+        def generate_stream():
+            try:
+                # Use the existing AI model to get a real response
+                print("🤖 Getting AI response...")
+                
+                # Check for chart request first
+                if query.lower().strip() == "create me a graph":
+                    print("📊 CHART REQUEST DETECTED - Generating chart data")
+                    chart_data = handle_chart_request(query, 'markdown')
+                    response_text = chart_data.get('response', 'Chart data generated!')
+                else:
+                    # Use the existing query engine for real AI responses
+                    print("🔍 Processing with AI model...")
+                    response = query_engine.query(query)
+                    response_text = str(response)
+                
+                print(f"✅ AI Response received: {len(response_text)} characters")
+                
+                # Stream the real AI response word by word for more natural typing
+                cursor = "|"
+                show_cursor = True
+                words = response_text.split()
+                
+                for i, word in enumerate(words):
+                    # Send the word with a space (except for the last word)
+                    word_to_send = word + (" " if i < len(words) - 1 else "")
+                    yield f"data: {json.dumps({'type': 'char', 'content': word_to_send})}\n\n"
+                    
+                    # Add blinking cursor every few words
+                    if i % 2 == 0:
+                        cursor_char = cursor if show_cursor else " "
+                        yield f"data: {json.dumps({'type': 'cursor', 'content': cursor_char})}\n\n"
+                        show_cursor = not show_cursor
+                    
+                    # Simulate typing speed (50ms per word for faster feel)
+                    import time
+                    time.sleep(0.05)
+                
+                # Send completion signal
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                
+            except Exception as e:
+                print(f"❌ Error in AI processing: {e}")
+                # Fallback to error message
+                error_text = f"Sorry, I encountered an error processing your request: {str(e)}"
+                for char in error_text:
+                    yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                    import time
+                    time.sleep(0.03)
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+        
+        return Response(
+            generate_stream(),
+            mimetype='text/plain',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+        )
+        
+    except Exception as e:
+        print(f"❌ Streaming error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/', methods=['GET'])
 def home():
     return "Flask server is running!"
