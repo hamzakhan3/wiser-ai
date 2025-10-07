@@ -52,27 +52,55 @@ export const Chart: React.FC<ChartProps> = ({ chartData, className = "" }) => {
 
   if (type === 'pie') {
     return (
-      <div className={`bg-white p-6 rounded-lg shadow-sm border ${className}`}>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">{title}</h3>
-        <div className="h-80">
+      <div className={`bg-gradient-to-br from-white to-gray-50 p-8 rounded-2xl shadow-lg border border-gray-200/50 ${className}`}>
+        <h3 className="text-xl font-bold text-gray-800 mb-6 text-center tracking-tight">{title}</h3>
+        <div className="h-96">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
+              <defs>
+                {colors.map((color, index) => (
+                  <linearGradient key={`gradient-${index}`} id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity={1} />
+                    <stop offset="100%" stopColor={color} stopOpacity={0.7} />
+                  </linearGradient>
+                ))}
+              </defs>
               <Pie
                 data={rechartsData}
                 cx="50%"
                 cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80}
+                labelLine={true}
+                label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                outerRadius={120}
+                innerRadius={70}
                 fill="#8884d8"
                 dataKey="value"
+                paddingAngle={2}
+                stroke="#fff"
+                strokeWidth={3}
               >
                 {rechartsData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={`url(#gradient-${index})`}
+                  />
                 ))}
               </Pie>
-              <Tooltip />
-              <Legend />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: 'rgba(255, 255, 255, 0.98)', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  padding: '12px'
+                }}
+              />
+              <Legend 
+                verticalAlign="bottom" 
+                height={36}
+                wrapperStyle={{ paddingTop: '20px' }}
+                iconType="circle"
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -82,17 +110,64 @@ export const Chart: React.FC<ChartProps> = ({ chartData, className = "" }) => {
 
   if (type === 'bar') {
     return (
-      <div className={`bg-white p-6 rounded-lg shadow-sm border ${className}`}>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">{title}</h3>
-        <div className="h-80">
+      <div className={`bg-gradient-to-br from-white to-gray-50 p-8 rounded-2xl shadow-lg border border-gray-200/50 ${className}`}>
+        <h3 className="text-xl font-bold text-gray-800 mb-6 text-center tracking-tight">{title}</h3>
+        <div className="h-[500px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rechartsData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill={colors[0]} />
+            <BarChart 
+              data={rechartsData} 
+              layout="horizontal" 
+              margin={{ top: 10, right: 40, left: 140, bottom: 30 }}
+            >
+              <defs>
+                <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor={colors[0]} stopOpacity={0.8} />
+                  <stop offset="100%" stopColor={colors[0]} stopOpacity={1} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid 
+                strokeDasharray="3 3" 
+                stroke="#e5e7eb" 
+                vertical={false}
+              />
+              <XAxis 
+                type="number" 
+                tick={{ fontSize: 13, fill: '#6b7280' }}
+                axisLine={{ stroke: '#d1d5db' }}
+                tickLine={{ stroke: '#d1d5db' }}
+              />
+              <YAxis 
+                type="category" 
+                dataKey="name" 
+                width={130}
+                tick={{ fontSize: 13, fill: '#374151', fontWeight: 500 }}
+                axisLine={{ stroke: '#d1d5db' }}
+                tickLine={{ stroke: '#d1d5db' }}
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: 'rgba(255, 255, 255, 0.98)', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  padding: '12px'
+                }}
+                cursor={{ fill: 'rgba(107, 155, 151, 0.1)' }}
+              />
+              <Legend 
+                wrapperStyle={{ paddingTop: '10px' }}
+                iconType="circle"
+              />
+              <Bar 
+                dataKey="value" 
+                fill="url(#barGradient)" 
+                radius={[0, 8, 8, 0]}
+                maxBarSize={40}
+              >
+                {rechartsData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -66,7 +66,7 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
   const datesWithTasks = getDatesWithTasks();
 
   return (
-    <div className="h-screen bg-sage-500 flex text-white relative">
+    <div className="h-screen bg-primary flex text-white relative">
       {/* Main sidebar */}
       <div className="w-[80px] flex flex-col items-center py-4">
         <button 
@@ -82,7 +82,7 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-white hover:bg-sage-600">
+                <Button variant="ghost" size="icon" className="text-white hover:bg-primary/80">
                   <FileText size={20} />
                 </Button>
               </TooltipTrigger>
@@ -95,7 +95,7 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-white hover:bg-sage-600">
+                <Button variant="ghost" size="icon" className="text-white hover:bg-primary/80">
                   <BookmarkIcon size={20} />
                 </Button>
               </TooltipTrigger>
@@ -111,7 +111,7 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-white hover:bg-sage-600"
+                  className="text-white hover:bg-primary/80"
                   onClick={handleMachineHealthClick}
                 >
                   <Heart size={20} />
@@ -129,7 +129,7 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className={`text-white hover:bg-sage-600 ${showCalendar && location.pathname === '/maintenance-schedule' ? 'bg-sage-600' : ''}`}
+                  className={`text-white hover:bg-primary/80 ${showCalendar && location.pathname === '/maintenance-schedule' ? 'bg-primary/80' : ''}`}
                   onClick={handleMaintenanceScheduleClick}
                 >
                   <CalendarDays size={20} />
@@ -147,7 +147,7 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-white hover:bg-sage-600"
+                  className="text-white hover:bg-primary/80"
                   onClick={handleSettingsClick}
                 >
                   <Settings size={20} />
@@ -162,7 +162,7 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-white hover:bg-sage-600">
+                <Button variant="ghost" size="icon" className="text-white hover:bg-primary/80">
                   <Info size={20} />
                 </Button>
               </TooltipTrigger>
