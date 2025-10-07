@@ -229,7 +229,8 @@ export const streamResponse = async (
   query: string,
   onChar: (char: string) => void,
   onCursor: (cursor: string) => void,
-  onComplete: () => void
+  onComplete: () => void,
+  onGraph?: (chartData: any) => void
 ): Promise<void> => {
   try {
     const response = await fetch(`${API_URL}/stream`, {
@@ -268,6 +269,11 @@ export const streamResponse = async (
               onChar(data.content);
             } else if (data.type === 'cursor') {
               onCursor(data.content);
+            } else if (data.type === 'graph') {
+              console.log('📊 Graph event received:', data.data);
+              if (onGraph) {
+                onGraph(data.data);
+              }
             } else if (data.type === 'complete') {
               onComplete();
             }
