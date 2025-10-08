@@ -288,3 +288,86 @@ export const streamResponse = async (
     throw error;
   }
 };
+
+export async function streamQuery(
+  query: string, 
+  source?: string, 
+  onChunk?: (chunk: string) => void,
+  onStatus?: (status: string) => void,
+  onComplete?: () => void
+): Promise<void> {
+  console.log(`streamQuery called with query: ${query}`);
+  console.log(`Source: ${source || 'unknown'}`);
+
+  const payload = { 
+    query,
+    source: source || 'unknown',
+    responseFormat: 'markdown',
+    stream: true  // Enable streaming
+  };
+  
+  console.log('Request payload:', JSON.stringify(payload, null, 2));
+
+  try {
+    const response = await fetch(`${API_URL}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    console.log(`Response status: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body reader available');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        console.log('Stream completed');
+        onComplete?.();
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            console.log('Received chunk:', data);
+            
+            switch (data.type) {
+              case 'char':
+                onChunk?.(data.content);
+                break;
+              case 'status':
+                onStatus?.(data.content);
+                break;
+              case 'complete':
+                onComplete?.();
+                return;
+            }
+          } catch (e) {
+            console.error('Error parsing SSE data:', e);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in streamQuery:', error);
+    throw error;
+  }
+}

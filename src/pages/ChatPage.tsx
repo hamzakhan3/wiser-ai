@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SendIcon, ArrowLeft, User, Bot } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { sendQuery, QueryResponse, streamResponse } from '@/services/apiService';
+import { sendQuery, QueryResponse, streamQuery } from '@/services/apiService';
 import { toast } from '@/hooks/use-toast';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -57,97 +57,69 @@ const ChatPage = () => {
         role: 'system', 
         content: '',
         id: messageId,
-        isStreaming: true
+        isStreaming: true,
+        format: 'markdown'
       }
     ]);
     
     try {
-      let streamedContent = '';
+      let accumulatedContent = '';
       
-      await streamResponse(
+      await streamQuery(
         query,
-        // onChar callback
-        (char: string) => {
-          streamedContent += char;
+        'chat-page',
+        // onChunk - add each character to the message
+        (chunk: string) => {
+          accumulatedContent += chunk;
           setMessages(prev => 
             prev.map(msg => 
               msg.id === messageId 
-                ? { ...msg, content: streamedContent }
+                ? { ...msg, content: accumulatedContent }
                 : msg
             )
           );
         },
-        // onCursor callback
-        (cursor: string) => {
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === messageId 
-                ? { ...msg, cursor: cursor }
-                : msg
-            )
-          );
+        // onStatus - show status updates
+        (status: string) => {
+          console.log('Status:', status);
+          // You could show a status indicator here
         },
-        // onComplete callback
+        // onComplete - mark streaming as complete
         () => {
           setMessages(prev => 
             prev.map(msg => 
               msg.id === messageId 
-                ? { ...msg, isStreaming: false, cursor: '' }
+                ? { ...msg, isStreaming: false }
                 : msg
             )
           );
           setIsLoading(false);
-        },
-        // onGraph callback
-        (chartData: any) => {
-          console.log('📊 Chart data received in ChatPage:', chartData);
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === messageId 
-                ? { ...msg, chartData: chartData }
-                : msg
-            )
-          );
         }
       );
-    } catch (error) {
-      console.error('Error streaming response:', error);
       
-      // Fallback to regular query if streaming fails
-      try {
-        const response = await sendQuery(query, 'chat-page');
-        
-        setMessages(prev => [
-          ...prev.filter(msg => msg.id !== messageId),
-          { 
-            role: 'system', 
-            content: response.response || "I'm sorry, I couldn't process that request.",
-            format: response.format || 'markdown',
-            chartData: response.chart_data,
-            statusChart: response.status_chart,
-            asciiChart: response.ascii_chart,
-            chartType: response.chart_type
-          }
-        ]);
-      } catch (fallbackError) {
-        console.error('Error with fallback query:', fallbackError);
-        
-        toast({
-          title: "Backend Error",
-          description: "Failed to get a response from the backend. Using simulated response instead.",
-          variant: "destructive"
-        });
-        
-        // Final fallback to simulated response
-        setMessages(prev => [
-          ...prev.filter(msg => msg.id !== messageId),
-          { 
-            role: 'system', 
-            content: `Here's some information about "${query}". This is a simulated response as this is a prototype or the backend is unavailable.`,
-            format: 'markdown'
-          }
-        ]);
-      }
+    } catch (error) {
+      console.error('Error getting response:', error);
+      
+      // Update the placeholder message with error content
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === messageId 
+            ? { 
+                ...msg, 
+                content: "I'm sorry, I encountered an error. Please try again.",
+                format: 'text',
+                isStreaming: false
+              }
+            : msg
+        )
+      );
+      
+      toast({
+        title: "Backend Error",
+        description: "Failed to get a response from the backend.",
+        variant: "destructive"
+      });
+      
       setIsLoading(false);
     }
   };
@@ -280,16 +252,10 @@ const ChatPage = () => {
                         }}
                       >
                         {message.content}
-                        {message.isStreaming && message.cursor && (
-                          <span className="animate-pulse text-blue-500">{message.cursor}</span>
-                        )}
                       </ReactMarkdown>
                     ) : (
                       <p className="text-gray-700 leading-relaxed">
                         {message.content}
-                        {message.isStreaming && message.cursor && (
-                          <span className="animate-pulse text-blue-500">{message.cursor}</span>
-                        )}
                       </p>
                     )}
                     

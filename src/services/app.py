@@ -18,6 +18,7 @@ import base64
 from dateutil import parser  
 from datetime import date
 from flask import Flask, Response, request, jsonify, stream_with_context
+import time
 
 import imagehash
 from redis import Redis
@@ -150,40 +151,47 @@ final_prompt = ""
 @log_time
 @app.route('/query', methods=['POST'])
 def query():
-    global first_prompt, final_prompt
-    print("🚀" + "="*60)
-    print("🚀 /query endpoint hit")
-    print("🚀" + "="*60)
-    
-    data = request.json
-    print("📥 Request JSON:", data)
-    
-    query_str = data.get("query")
-    source = data.get("source")
-    response_format = data.get("responseFormat", "markdown")
-    
-    print("📝" + "="*60)
-    print("📝 INCOMING PROMPT:")
-    print("📝" + "="*60)
-    print(f"📝 '{query_str}'")
-    print("📝" + "="*60)
-    print(f"🔍 Source: '{source}'")
-    print(f"🔍 Response Format: '{response_format}'")
-    
-    if not query_str:
-        print("❌ ERROR: No query string provided")
-        return jsonify({"error": "Query string is required"}), 400
-    
-    if source == "anomaly":
-        print("🔍 Handling anomaly source")
-        machine_id = data.get("machine_id")
-        print(f"🔍 Machine ID: {machine_id}")
-        image_url = get_machine_image_url(machine_id)
-        print(f"🔍 Image URL: {image_url}")
-        return handle_anomaly_source(query_str, image_url)
-    
-    print("➡️  Routing to handle_text_query()")
-    return handle_text_query(query_str, response_format)
+    try:
+        data = request.get_json()
+        query_str = data.get('query', '')
+        source = data.get('source', 'unknown')
+        response_format = data.get('responseFormat', 'text')
+        stream = data.get('stream', False)  # New parameter
+        
+        print(f"📊 Query received: '{query_str}' from {source}")
+        print(f"📊 Stream mode: {stream}")
+        
+        if not query_str:
+            print("❌ ERROR: No query string provided")
+            return jsonify({"error": "Query string is required"}), 400
+        
+        if source == "anomaly":
+            print("🔍 Handling anomaly source")
+            machine_id = data.get("machine_id")
+            print(f"🔍 Machine ID: {machine_id}")
+            image_url = get_machine_image_url(machine_id)
+            print(f"🔍 Image URL: {image_url}")
+            return handle_anomaly_source(query_str, image_url)
+        
+        if stream:
+            # Return streaming response
+            return Response(
+                stream_with_context(stream_query_response(query_str, response_format)),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                }
+            )
+        else:
+            # Return regular JSON response (current behavior)
+            return handle_text_query(query_str, response_format)
+            
+    except Exception as e:
+        print(f"❌ Error in query endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 def get_machine_image_url(machine_id):
@@ -591,6 +599,29 @@ def handle_text_query(query_str, response_format):
     contains_table_name = any(table in query_lower for table in table_names)
     print(f"🔍 Contains table name: {contains_table_name}")
     
+    # Check for simple greetings first - but only if no database-related words are present
+    greeting_keywords = ['hey', 'hi', 'hello', 'good morning', 'good afternoon', 'good evening']
+    db_related_words = ['machine', 'machines', 'production', 'health', 'status', 'data', 'list', 'show', 'tell', 'about', 'query', 'database', 'table']
+    
+    # Only treat as greeting if:
+    # 1. Contains a greeting keyword AND
+    # 2. Does NOT contain any database-related words AND  
+    # 3. Query is short (less than 20 characters) OR starts with greeting
+    contains_greeting = any(greeting in query_lower for greeting in greeting_keywords)
+    contains_db_words = any(word in query_lower for word in db_related_words)
+    is_short_query = len(query_lower) < 20
+    starts_with_greeting = any(query_lower.startswith(greeting) for greeting in greeting_keywords)
+    
+    is_simple_greeting = contains_greeting and not contains_db_words and (is_short_query or starts_with_greeting)
+    
+    if is_simple_greeting:
+        # Simple greeting response - no database query needed
+        print("👋 Simple greeting detected - using direct response")
+        return jsonify({
+            "response": "Hello! I'm Wise Guy, your AI assistant for machine monitoring and data analysis. How can I help you today?",
+            "format": response_format
+        })
+    
     # If it contains table names, go to database
     if contains_table_name:
         print("🗄️ TABLE NAME DETECTED - Will query database for table information")
@@ -698,6 +729,87 @@ def handle_text_query(query_str, response_format):
     })
 
 
+def stream_query_response(query_str, response_format):
+    """Generator function for streaming responses"""
+    try:
+        # Check for simple greetings first
+        query_lower = query_str.lower().strip()
+        greeting_keywords = ['hey', 'hi', 'hello', 'good morning', 'good afternoon', 'good evening']
+        db_related_words = ['machine', 'machines', 'production', 'health', 'status', 'data', 'list', 'show', 'tell', 'about', 'query', 'database', 'table']
+        
+        contains_greeting = any(greeting in query_lower for greeting in greeting_keywords)
+        contains_db_words = any(word in query_lower for word in db_related_words)
+        is_short_query = len(query_lower) < 20
+        starts_with_greeting = any(query_lower.startswith(greeting) for greeting in greeting_keywords)
+        
+        is_simple_greeting = contains_greeting and not contains_db_words and (is_short_query or starts_with_greeting)
+        
+        if is_simple_greeting:
+            # Stream simple greeting response
+            greeting = "Hello! I'm Wise Guy, your AI assistant for machine monitoring and data analysis. How can I help you today?"
+            for char in greeting:
+                yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                time.sleep(0.02)  # Small delay for typing effect
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+            return
+        
+        # Check for table names
+        table_names = ["machine_current_log", "lab", "users", "node", "machine", "lab_user", "current_sensor", "daily_machine_health", "shift_machine_production"]
+        contains_table_name = any(table in query_lower for table in table_names)
+        
+        if contains_table_name:
+            # Stream LlamaIndex response
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Querying database...'})}\n\n"
+            
+            # Get LlamaIndex response
+            response_text = query_engine.query(query_str).response
+            print(f"📊 LlamaIndex response: {response_text}")
+            
+            # Stream GPT-4o refinement
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Processing response...'})}\n\n"
+            
+            try:
+                refined_response = openai.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that formats information into clear, well-structured markdown. Make the response more readable, professional, and properly formatted with headings, lists, and emphasis where appropriate. Do not mention databases, SQL queries, or technical implementation details in your response."},
+                        {"role": "user", "content": f"Please format this information into clear, well-structured markdown: {response_text}"}
+                    ],
+                    stream=True  # Enable streaming from GPT-4o
+                )
+                
+                # Stream GPT-4o response chunk by chunk
+                for chunk in refined_response:
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        yield f"data: {json.dumps({'type': 'char', 'content': content})}\n\n"
+                        time.sleep(0.01)  # Small delay for typing effect
+                        
+            except Exception as refine_error:
+                print(f"⚠️ GPT-4o refinement failed: {refine_error}")
+                # Fallback to original response
+                for char in response_text:
+                    yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                    time.sleep(0.02)
+            
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+        else:
+            # No table names found
+            no_data_response = "I don't have access to that information in my current database. Please ask about machines, production data, health status, or users."
+            for char in no_data_response:
+                yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                time.sleep(0.02)
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+            
+    except Exception as e:
+        print(f"❌ Error in streaming: {e}")
+        error_response = f"I encountered an error: {str(e)}"
+        for char in error_response:
+            yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+            time.sleep(0.02)
+        yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+
     
 @app.route('/stream', methods=['POST'])
 def stream_response():
@@ -708,7 +820,7 @@ def stream_response():
         
         print(f"🎯 REQUEST: {query}")
         
-                # Use the existing AI model to get a real response
+        # Use the existing AI model to get a real response
         print("🤖 Getting AI response...")
                 
         # Check if query is asking for machine health, production, or parts distribution
@@ -987,23 +1099,21 @@ def stream_response():
                     refined_response = openai.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "system", "content": "You are a helpful assistant that formats database query responses into clear, well-structured markdown. Make the response more readable, professional, and properly formatted with headings, lists, and emphasis where appropriate."},
-                            {"role": "user", "content": f"Please format this database response into clear, well-structured markdown: {response_text}"}
+                            {"role": "system", "content": "You are a helpful assistant that formats information into clear, well-structured markdown. Make the response more readable, professional, and properly formatted with headings, lists, and emphasis where appropriate. Do not mention databases, SQL queries, or technical implementation details in your response."},
+                            {"role": "user", "content": f"Please format this information into clear, well-structured markdown: {response_text}"}
                         ]
                     )
                     refined_text = refined_response.choices[0].message.content
                     print(f"✅ GPT-4o refinement completed: {len(refined_text)} characters")
                     
-                    # Apply additional formatting to the GPT-refined response
-                    print("📝 Applying additional markdown formatting...")
-                    final_formatted_response = format_response_as_markdown(refined_text)
-                    response_data['content'] = final_formatted_response
+                    # Use GPT-4o's markdown formatting directly (no additional processing)
+                    response_data['content'] = refined_text
                     
                 except Exception as refine_error:
                     print(f"⚠️ GPT-4o refinement failed: {refine_error}")
                     print("📝 Using original response with basic formatting...")
-                    formatted_response = format_response_as_markdown(response_text)
-                    response_data['content'] = formatted_response
+                    # Use the original response with minimal formatting
+                    response_data['content'] = response_text
         
         print(f"✅ AI Response received: {len(response_data['content'])} characters")
         

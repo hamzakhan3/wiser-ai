@@ -9,7 +9,7 @@ import { ArrowLeft, ChevronDown, ChevronUp, Sparkles, User, Bot } from 'lucide-r
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChatPromptBar } from '@/components/ChatPromptBar';
 import { WorkOrderForm } from '@/components/WorkOrderForm';
-import { sendQuery, fetchInspectionData, InspectionFilters, GraphData, streamResponse } from '@/services/apiService';
+import { sendQuery, fetchInspectionData, InspectionFilters, GraphData, streamResponse, streamQuery } from '@/services/apiService';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ReactNode } from 'react';
@@ -123,43 +123,40 @@ const InspectionPage = () => {
     ]);
     
     try {
-      let streamedContent = '';
+      let accumulatedContent = '';
       
-      await streamResponse(
+      await streamQuery(
         message,
-        // onChar callback
-        (char: string) => {
-          streamedContent += char;
+        'inspection-page',
+        // onChunk - add each character to the message
+        (chunk: string) => {
+          accumulatedContent += chunk;
           setMessages(prev => 
             prev.map(msg => 
               msg.id === messageId 
-                ? { ...msg, content: streamedContent }
+                ? { ...msg, content: accumulatedContent }
                 : msg
             )
           );
         },
-        // onCursor callback
-        (cursor: string) => {
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === messageId 
-                ? { ...msg, cursor: cursor }
-                : msg
-            )
-          );
+        // onStatus - show status updates
+        (status: string) => {
+          console.log('Status:', status);
+          // You could show a status indicator here
         },
-        // onComplete callback
+        // onComplete - mark streaming as complete
         () => {
           setMessages(prev => 
             prev.map(msg => 
               msg.id === messageId 
-                ? { ...msg, isStreaming: false, cursor: '' }
+                ? { ...msg, isStreaming: false }
                 : msg
             )
           );
           setIsQueryLoading(false);
         }
       );
+      
     } catch (error) {
       console.error('Failed to send query:', error);
       
@@ -169,9 +166,9 @@ const InspectionPage = () => {
           msg.id === messageId 
             ? { 
                 ...msg, 
-                content: `I couldn't process your question about "${message}". This is a simulated response as the backend is unavailable.`,
-                isStreaming: false,
-                cursor: ''
+                content: "I'm sorry, I encountered an error. Please try again.",
+                format: 'text',
+                isStreaming: false
               }
             : msg
         )
@@ -179,7 +176,7 @@ const InspectionPage = () => {
       
       toast({
         title: "Query Failed",
-        description: "Could not process your question. Using simulated response.",
+        description: "Could not process your question. Please try again.",
         variant: "destructive",
       });
       
