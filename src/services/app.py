@@ -1118,7 +1118,7 @@ def stream_response():
         print(f"✅ AI Response received: {len(response_data['content'])} characters")
         
         return jsonify(response_data)
-        
+                
     except Exception as e:
         print(f"❌ Error: {e}")
         return jsonify({"error": str(e)}), 500

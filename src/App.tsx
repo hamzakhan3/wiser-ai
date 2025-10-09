@@ -11,6 +11,7 @@ import PostgreSQLSetupPage from "./pages/PostgreSQLSetupPage";
 import MachineHealthPage from "./pages/MachineHealthPage";
 import InspectionPage from "./pages/InspectionPage";
 import MaintenanceSchedulePage from "./pages/MaintenanceSchedulePage";
+import WisdomPage from "./pages/WisdomPage";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/machine-health" element={<MachineHealthPage />} />
           <Route path="/inspection" element={<InspectionPage />} />
           <Route path="/maintenance-schedule" element={<MaintenanceSchedulePage />} />
+          <Route path="/wisdom" element={<WisdomPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

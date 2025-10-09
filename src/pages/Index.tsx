@@ -7,6 +7,7 @@ import { NewTab } from '@/components/NewTab';
 import { SavedQueries } from '@/components/SavedQueries';
 import { Logo } from '@/components/Logo';
 import { Footer } from '@/components/Footer';
+import { Button } from '@/components/ui/button';
 
 const Index = () => {
   const featuredArticles = [
@@ -32,6 +33,12 @@ const Index = () => {
       <div className="flex-1 flex flex-col overflow-auto">
         <header className="p-4 border-b flex justify-between items-center">
           <Logo />
+          <Button 
+            onClick={() => window.location.href = '/wisdom'}
+            className="bg-[#36635F] hover:bg-[#2a4f4b] text-white"
+          >
+            Discover Wisdom
+          </Button>
         </header>
         
         <main className="flex flex-1">

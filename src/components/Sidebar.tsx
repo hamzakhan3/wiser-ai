@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Settings, Info, BookmarkIcon, Heart, CalendarDays } from 'lucide-react';
+import { FileText, Settings, Info, BookmarkIcon, Heart, CalendarDays, Lightbulb } from 'lucide-react';
 import { Button } from './ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Calendar } from './ui/calendar';
@@ -58,6 +58,10 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
     }
   };
 
+  const handleWisdomClick = () => {
+    navigate('/wisdom');
+  };
+
   // Get dates that have maintenance tasks
   const getDatesWithTasks = () => {
     return maintenanceTasks.map(task => task.scheduledDate);
@@ -101,6 +105,24 @@ export const Sidebar = ({ maintenanceTasks = [], selectedDate, onDateSelect }: S
               </TooltipTrigger>
               <TooltipContent side="right">
                 <p>Saved Queries</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-white hover:bg-primary/80"
+                  onClick={handleWisdomClick}
+                >
+                  <Lightbulb size={20} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>Discover Wisdom</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
