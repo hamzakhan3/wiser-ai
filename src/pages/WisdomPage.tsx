@@ -26,12 +26,15 @@ const WisdomPage: React.FC = () => {
 
   const handleQueryClick = (query: string) => {
     setSearchQuery(query);
+    // Navigate to chat page with the query
+    window.location.href = `/chat?q=${encodeURIComponent(query)}`;
   };
 
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
+  const handleSearch = (message?: string) => {
+    const query = message || searchQuery;
+    if (query.trim()) {
       // Navigate to chat page with the query
-      window.location.href = `/chat?query=${encodeURIComponent(searchQuery)}`;
+      window.location.href = `/chat?q=${encodeURIComponent(query)}`;
     }
   };
 
@@ -182,7 +185,7 @@ const WisdomPage: React.FC = () => {
           {/* Chat Input Bar */}
           <div className="w-full max-w-2xl">
             <ChatInputBar 
-              onSendMessage={handleSendMessage}
+              onSendMessage={handleSearch}
               placeholder="Ask away !"
             />
           </div>
