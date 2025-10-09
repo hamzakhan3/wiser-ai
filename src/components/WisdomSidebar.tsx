@@ -39,9 +39,10 @@ const WisdomSidebar: React.FC = () => {
             </div>
           </Button>
           
-          {/* Overlapping Panels Icon */}
+          {/* Overlapping Panels Icon - Wisdom Navigation */}
           <Button 
             variant="ghost" 
+            onClick={() => handleNavigation('wisdom')}
             className="w-3 h-3 bg-white/10 hover:bg-white/15 rounded flex items-center justify-center p-0"
           >
             <div className="relative w-1.5 h-1">

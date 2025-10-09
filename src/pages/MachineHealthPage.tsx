@@ -5,6 +5,40 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
+// Use localhost for local development
+const API_URL = 'http://localhost:5001';
+
+// Debug: Log the current hostname
+console.log('Current hostname:', window.location.hostname);
+console.log('Current origin:', window.location.origin);
+console.log('API_URL constant:', API_URL);
+
+// Test the API_URL by making a simple request to the root
+fetch(API_URL)
+  .then(response => {
+    console.log('Root API test - Status:', response.status);
+    console.log('Root API test - OK:', response.ok);
+  })
+  .catch(error => {
+    console.error('Root API test failed:', error);
+  });
+
+// Test the working maintenance-tasks endpoint for comparison
+fetch(`${API_URL}/maintenance-tasks`)
+  .then(response => response.text())
+  .then(text => {
+    console.log('Maintenance-tasks test - Response length:', text.length);
+    console.log('Maintenance-tasks test - First 100 chars:', text.substring(0, 100));
+    console.log('Maintenance-tasks test - Is JSON?', text.startsWith('{'));
+  })
+  .catch(error => {
+    console.error('Maintenance-tasks test failed:', error);
+  });
+
+// Add a button to test the URL directly
+console.log('🔗 Test URL directly:', `${API_URL}/maintenance-tasks`);
+console.log('🔗 Open this URL in a new tab to see if it shows the ngrok warning page');
+
 interface MachineData {
   id: string;
   machine: string;
@@ -23,35 +57,91 @@ const MachineHealthPage = () => {
 
   const fetchMachineData = async () => {
     console.log('Fetching machine data from backend...');
+    console.log('API_URL:', API_URL);
+    console.log('Full URL:', `${API_URL}/machine-health`);
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:5001/machine-health', {
+      const fullUrl = `${API_URL}/machine-health`;
+      console.log('Making request to:', fullUrl);
+      console.log('Request headers:', {
+        'note': 'No custom headers (removed Content-Type to avoid ngrok warning)',
+      });
+      
+      const response = await fetch(fullUrl, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        // Remove Content-Type header to avoid triggering ngrok warning
+        cache: 'no-cache', // Force fresh request
       });
 
       console.log('Response status:', response.status);
       console.log('Response ok:', response.ok);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
-      const data = await response.json();
-      console.log('Raw response data:', data);
-      console.log('Machines array:', data.machines);
-      console.log('Number of machines:', data.machines?.length || 0);
+      // Log the raw response text before parsing
+      const responseText = await response.text();
+      console.log('Raw response text:', responseText);
+      console.log('Response text length:', responseText.length);
+      console.log('First 100 chars:', responseText.substring(0, 100));
       
-      setMachines(data.machines || []);
+      // Check if response is HTML (ngrok warning page)
+      if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+        console.warn('Received HTML response (likely ngrok warning page)');
+        throw new Error('Received HTML response instead of JSON. This might be the ngrok warning page.');
+      }
+      
+      // Try to parse as JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        console.error('Response was not valid JSON');
+        throw new Error(`Invalid JSON response: ${parseError.message}`);
+      }
+      console.log('=== BACKEND RESPONSE DEBUG ===');
+      console.log('Raw response data:', data);
+      console.log('Response type:', typeof data);
+      console.log('Response keys:', Object.keys(data));
+      
+      // Handle both machine-health and maintenance-tasks responses
+      if (data.machines) {
+        console.log('Machines array:', data.machines);
+        console.log('Machines type:', typeof data.machines);
+        console.log('Machines length:', data.machines?.length || 0);
+        console.log('Is machines array?', Array.isArray(data.machines));
+        console.log('First machine:', data.machines?.[0]);
+        setMachines(data.machines || []);
+      } else if (data.tasks) {
+        console.log('Tasks array (testing with maintenance-tasks):', data.tasks);
+        console.log('Tasks length:', data.tasks?.length || 0);
+        // Convert tasks to machines format for testing
+        const convertedMachines = data.tasks.map((task: any) => ({
+          id: task.id,
+          machine: task.machineName,
+          severityLevel: task.priority.toUpperCase(),
+          lastAnomaly: task.scheduledDate,
+          sensorType: 'Maintenance'
+        }));
+        console.log('Converted machines:', convertedMachines);
+        setMachines(convertedMachines);
+      }
+      console.log('=== END DEBUG ===');
     } catch (error) {
       console.error('Error fetching machine data:', error);
-      setError('Failed to load machine data. Please check your backend connection.');
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      setError(`Failed to load machine data: ${error.message}`);
       toast({
         title: "Error",
-        description: "Could not connect to backend. Please try again.",
+        description: `Could not connect to backend: ${error.message}`,
         variant: "destructive",
       });
     } finally {
@@ -63,6 +153,14 @@ const MachineHealthPage = () => {
     console.log('MachineHealthPage mounted, fetching data...');
     fetchMachineData();
   }, []);
+
+  // Debug: Log when machines state changes
+  useEffect(() => {
+    console.log('=== MACHINES STATE CHANGED ===');
+    console.log('New machines state:', machines);
+    console.log('Machines length:', machines.length);
+    console.log('=== END MACHINES STATE CHANGE ===');
+  }, [machines]);
 
   const handleRowClick = (machineId: string) => {
     console.log('Row clicked for machine:', machineId);
@@ -85,7 +183,12 @@ const MachineHealthPage = () => {
     navigate(`/inspection?machineId=${encodeURIComponent(machine.id)}&machineName=${encodeURIComponent(machine.machine)}&sensorType=${encodeURIComponent(machine.sensorType)}`);
   };
 
-  console.log('Current state - machines:', machines, 'isLoading:', isLoading, 'error:', error);
+  console.log('=== COMPONENT STATE DEBUG ===');
+  console.log('Current state - machines:', machines);
+  console.log('Machines length:', machines.length);
+  console.log('isLoading:', isLoading);
+  console.log('error:', error);
+  console.log('=== END STATE DEBUG ===');
 
   return (
     <div className="flex min-h-screen">
@@ -132,6 +235,7 @@ const MachineHealthPage = () => {
                       <TableCell className="font-medium">{machine.machine}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          machine.severityLevel === 'CRITICAL' ? 'bg-red-200 text-red-900 font-bold' :
                           machine.severityLevel === 'High' ? 'bg-red-100 text-red-800' :
                           machine.severityLevel === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-green-100 text-green-800'

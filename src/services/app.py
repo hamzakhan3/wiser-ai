@@ -1,6 +1,10 @@
 from flask import Flask, request, jsonify
 import json
 from sqlalchemy import create_engine
+import logging
+
+# Disable SQLAlchemy verbose logging
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 from llama_index.core.indices.struct_store.sql import SQLDatabase
 from llama_index.core.query_engine import NLSQLTableQueryEngine
 from openai import OpenAI as OpenAIClient
@@ -128,15 +132,44 @@ engine = create_engine(
 sql_database = SQLDatabase(engine)
 sql_database = SQLDatabase(
     engine, 
-    include_tables=["lab", "users", "node", "machine", "lab_user", "current_sensor", "daily_machine_health", "shift_machine_production"]
+    include_tables=[
+        "lab", "users", "node", "machine", "lab_user", 
+        "current_sensor", "critical_health_machine", "shift_machine_production",
+        # Add these for root cause analysis:
+        "temperature_sensor", "humidity_sensor", "machine_current_log",
+        "anomalies", "anomaly_detections", "inference_data", 
+        "work_orders", "maintenance_task", "machine_parts",
+        "vibration_inference_data",
+        # Add energy consumption table:
+        "machine_energy_consumption",
+        # Add troubleshooting and resolution tables:
+        "machine_troubleshooting", "maintenance_procedures", 
+        "machine_parts_inventory", "machine_issue_history",
+        "machine_performance_benchmarks"
+    ]
 )
 
 # Now create the query engine with the PostgreSQL database
 query_engine = NLSQLTableQueryEngine(
     sql_database=sql_database, 
-    tables=["lab", "users", "node", "machine", "lab_user", "current_sensor", "shift_machine_production", "maintenance_schedule", "maintenance_parts", "daily_machine_health"], 
+    tables=[
+        "lab", "users", "node", "machine", "lab_user", 
+        "current_sensor", "shift_machine_production", "maintenance_schedule", 
+        "maintenance_parts", "critical_health_machine",
+        # Add these for root cause analysis:
+        "temperature_sensor", "humidity_sensor", "machine_current_log",
+        "anomalies", "anomaly_detections", "inference_data",
+        "work_orders", "maintenance_task", "machine_parts", 
+        "vibration_inference_data",
+        # Add energy consumption table:
+        "machine_energy_consumption",
+        # Add troubleshooting and resolution tables:
+        "machine_troubleshooting", "maintenance_procedures", 
+        "machine_parts_inventory", "machine_issue_history",
+        "machine_performance_benchmarks"
+    ], 
     llm=None,
-    verbose=True  # Disable verbose for better performance
+    verbose=False  # Disable verbose for better performance
 )
 
 
@@ -590,7 +623,20 @@ def handle_text_query(query_str, response_format):
     
     # Check for database table names from query_engine FIRST (higher priority)
     # MUST match the tables passed to NLSQLTableQueryEngine exactly
-    table_names = ["machine_current_log", "lab", "users", "node", "machine", "lab_user", "current_sensor", "daily_machine_health", "shift_machine_production"]
+    table_names = [
+        "machine_current_log", "lab", "users", "node", "machine", "lab_user", 
+        "current_sensor", "shift_machine_production",
+        "temperature_sensor", "humidity_sensor", "anomalies", "anomaly_detections", 
+        "inference_data", "work_orders", "maintenance_task", "machine_parts", 
+        "vibration_inference_data", "critical_health_machine",
+        "maintenance_schedule", "maintenance_parts",
+        # Add energy consumption table:
+        "machine_energy_consumption",
+        # Add troubleshooting and resolution tables:
+        "machine_troubleshooting", "maintenance_procedures", 
+        "machine_parts_inventory", "machine_issue_history",
+        "machine_performance_benchmarks"
+    ]
     
     
     query_lower = query_str.lower().strip()

@@ -16,12 +16,12 @@ const WisdomPage: React.FC = () => {
   };
 
   const suggestedQueries = [
-    "Reduce Downtime for meeting high demand",
+    "Which 3 machines have had the most downtime recently?",
     "How to handle breakdown during production", 
-    "Management Tips for a gen-z workforce",
-    "How do I tackle upcoming maintenance tasks",
-    "How Do I reduce My Power Consumption",
-    "Leading with stoicism"
+    "Can I improve my productivity?",
+    "Which machines are scheduled for maintenance?",
+    "Top 3 machines that consume the most energy monthly?",
+    "Which machines are in critical state?"
   ];
 
   const handleQueryClick = (query: string) => {
