@@ -9,6 +9,7 @@ import {
   Bookmark, 
   Plus, 
   Download,
+  Settings,
   Info
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -58,17 +59,17 @@ const WisdomSidebar: React.FC = () => {
         
         {/* Navigation Items - 2x2 Grid with Drop Shadows - Centered */}
         <div className="flex justify-center">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-2">
           {/* Calendar Icon - Top Left */}
           <Button 
             variant="ghost" 
-            onClick={() => handleNavigation('calendar')}
+            onClick={() => handleNavigation('maintenance-schedule')}
             className="w-16 h-10 bg-white/10 hover:bg-white/15 rounded-lg flex items-center justify-center p-0 shadow-lg hover:shadow-xl transition-all duration-200"
             style={{
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             }}
           >
-            <Calendar className="w-5 h-5 text-white" />
+            <Calendar className="w-6 h-6 text-white" />
           </Button>
           
           {/* Droplets/Sprinkler Icon - Top Right */}
@@ -80,19 +81,19 @@ const WisdomSidebar: React.FC = () => {
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             }}
           >
-            <Droplets className="w-5 h-5 text-white" />
+            <Droplets className="w-6 h-6 text-white" />
           </Button>
           
           {/* Pie Chart Icon - Bottom Left */}
           <Button 
             variant="ghost" 
-            onClick={() => handleNavigation('analytics')}
+            onClick={() => handleNavigation('machine-health')}
             className="w-16 h-10 bg-white/10 hover:bg-white/15 rounded-lg flex items-center justify-center p-0 shadow-lg hover:shadow-xl transition-all duration-200"
             style={{
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             }}
           >
-            <PieChart className="w-5 h-5 text-white" />
+            <PieChart className="w-6 h-6 text-white" />
           </Button>
           
           {/* Bell/Notification Icon - Bottom Right */}
@@ -104,7 +105,7 @@ const WisdomSidebar: React.FC = () => {
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             }}
           >
-            <Bell className="w-5 h-5 text-white" />
+            <Bell className="w-6 h-6 text-white" />
           </Button>
           </div>
         </div>
@@ -120,8 +121,14 @@ const WisdomSidebar: React.FC = () => {
           </span>
         </div>
         
+        {/* Spacing */}
+        <div className="py-2"></div>
+        
         {/* Horizontal Separator */}
         <div className="h-px bg-white/20 mx-2"></div>
+        
+        {/* Spacing */}
+        <div className="py-2"></div>
         
         {/* New Tab Button */}
         <Button 
@@ -159,13 +166,28 @@ const WisdomSidebar: React.FC = () => {
             variant="ghost" 
             size="sm"
             className="w-5 h-5 p-0 hover:bg-white/12 rounded"
+            onClick={() => handleNavigation('download')}
           >
             <Download className="w-4 h-4 text-white rotate-180" />
           </Button>
           
           <div className="flex items-center space-x-1">
-            <div className="w-3 h-3 bg-white rounded-full"></div>
-            <Info className="w-4 h-4 text-white" />
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="w-5 h-5 p-0 hover:bg-white/12 rounded"
+              onClick={() => handleNavigation('settings')}
+            >
+              <Settings className="w-4 h-4 text-white" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="w-5 h-5 p-0 hover:bg-white/12 rounded"
+              onClick={() => handleNavigation('info')}
+            >
+              <Info className="w-4 h-4 text-white" />
+            </Button>
           </div>
         </div>
       </div>

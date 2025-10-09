@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/Sidebar';
+import WisdomSidebar from '@/components/WisdomSidebar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -136,11 +136,7 @@ const MaintenanceSchedulePage = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex w-full">
-        <Sidebar 
-          maintenanceTasks={[]}
-          selectedDate={selectedDate}
-          onDateSelect={setSelectedDate}
-        />
+        <WisdomSidebar />
         
         <div className="flex-1 flex flex-col bg-gray-50">
           <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -165,18 +161,7 @@ const MaintenanceSchedulePage = () => {
 
   return (
     <div className="min-h-screen flex w-full">
-      <Sidebar 
-        maintenanceTasks={maintenanceTasks.map(task => ({
-          ...task,
-          scheduledDate: new Date(task.scheduledDate),
-          machine_id: task.machineId,
-          machine_name: task.machineName,
-          task_type: task.taskType,
-          assigned_technician: task.assignedTechnician
-        }))}
-        selectedDate={selectedDate}
-        onDateSelect={setSelectedDate}
-      />
+      <WisdomSidebar />
       
       <div className="flex-1 flex flex-col bg-gray-50">
         <div className="bg-white border-b border-gray-200 px-6 py-4">

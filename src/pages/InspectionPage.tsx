@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/Sidebar';
+import WisdomSidebar from '@/components/WisdomSidebar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -297,7 +297,7 @@ const InspectionPage = () => {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar />
+      <WisdomSidebar />
       <div className="flex-1 flex flex-col bg-gray-50">
         <ScrollArea className="flex-1">
           <div className="p-6">

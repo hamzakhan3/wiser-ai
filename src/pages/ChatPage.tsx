@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Sidebar } from '@/components/Sidebar';
+import WisdomSidebar from '@/components/WisdomSidebar';
 import { Logo } from '@/components/Logo';
 import { Footer } from '@/components/Footer';
 import { useSearchParams } from 'react-router-dom';
@@ -140,7 +140,7 @@ const ChatPage = () => {
 
   return (
     <div className="flex h-screen bg-white">
-      <Sidebar />
+      <WisdomSidebar />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="p-4 border-b flex justify-between items-center">

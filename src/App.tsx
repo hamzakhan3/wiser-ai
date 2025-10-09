@@ -12,6 +12,7 @@ import MachineHealthPage from "./pages/MachineHealthPage";
 import InspectionPage from "./pages/InspectionPage";
 import MaintenanceSchedulePage from "./pages/MaintenanceSchedulePage";
 import WisdomPage from "./pages/WisdomPage";
+import ComingSoonPage from "./pages/ComingSoonPage";
 
 const queryClient = new QueryClient();
 
@@ -30,8 +31,9 @@ const App = () => (
           <Route path="/inspection" element={<InspectionPage />} />
           <Route path="/maintenance-schedule" element={<MaintenanceSchedulePage />} />
           <Route path="/wisdom" element={<WisdomPage />} />
+          <Route path="/coming-soon" element={<ComingSoonPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route path="*" element={<ComingSoonPage />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

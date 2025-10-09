@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/Sidebar';
+import WisdomSidebar from '@/components/WisdomSidebar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -89,7 +89,7 @@ const MachineHealthPage = () => {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <WisdomSidebar />
       <div className="flex-1 bg-gray-50 p-8">
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-between items-center mb-8">

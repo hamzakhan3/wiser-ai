@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Sidebar } from '@/components/Sidebar';
+import WisdomSidebar from '@/components/WisdomSidebar';
 import { Database, Cloud, FileText, Link, Clipboard, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -56,7 +56,7 @@ const SettingsPage = () => {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <WisdomSidebar />
       <div className="flex-1 bg-gray-50 p-8">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Settings</h1>
