@@ -277,6 +277,7 @@ const MaintenanceSchedulePage = () => {
                               <h4 className="font-medium text-gray-900">{task.machineName}</h4>
                               <p className="text-sm text-gray-600">{task.taskType}</p>
                             </div>
+                          </div>
                           
                           <p className="text-sm text-gray-500 mb-2">{task.description}</p>
                           
