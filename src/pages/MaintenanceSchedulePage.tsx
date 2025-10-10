@@ -69,6 +69,7 @@ const MaintenanceSchedulePage = () => {
   };
 
   const datesWithTasks = getDatesWithTasks();
+  const today = new Date();
   const selectedDateTasks = getTasksForDate(selectedDate);
 
   const handleWorkOrderSubmit = (workOrderData: any) => {
@@ -194,7 +195,7 @@ const MaintenanceSchedulePage = () => {
                     textAlign: 'left'
                   }}
                 >
-                  Preventive Maintenance Scheduler
+                  Maintenance Scheduler
                 </h1>
                 <p className="text-gray-600">Schedule and track machine maintenance tasks</p>
               </div>
@@ -242,15 +243,24 @@ const MaintenanceSchedulePage = () => {
                         setSelectedDate(date);
                       }
                     }}
-                    className="rounded-md border"
+                    className="rounded-md border [&_.rdp-day]:w-12 [&_.rdp-day]:h-12 [&_.rdp-day]:text-base [&_.rdp-day]:font-medium [&_.rdp-head_cell]:w-12 [&_.rdp-head_cell]:h-10 [&_.rdp-head_cell]:text-sm [&_.rdp-head_cell]:font-semibold [&_.rdp-caption]:mb-4 [&_.rdp-nav]:space-x-2"
                     modifiers={{
                       hasTask: datesWithTasks,
+                      today: today,
                     }}
                     modifiersStyles={{
                       hasTask: {
-                        backgroundColor: '#10b981',
+                        backgroundColor: '#437874',
                         color: 'white',
                         fontWeight: 'bold',
+                        borderRadius: '6px',
+                      },
+                      today: {
+                        backgroundColor: 'rgba(67, 120, 116, 0.2)',
+                        color: '#437874',
+                        fontWeight: 'bold',
+                        borderRadius: '6px',
+                        border: '2px solid #437874',
                       },
                     }}
                   />
@@ -307,23 +317,7 @@ const MaintenanceSchedulePage = () => {
             /* List View */
             <div className="space-y-4">
               <Card>
-                <CardHeader>
-                  <CardTitle 
-                    style={{
-                      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                      fontWeight: 500,
-                      fontSize: '28px',
-                      lineHeight: '1.2',
-                      letterSpacing: '-0.02em',
-                      color: '#2d3748',
-                      textTransform: 'none',
-                      textAlign: 'left'
-                    }}
-                  >
-                    All Scheduled Maintenance Tasks
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                   {maintenanceTasks.length === 0 ? (
                     <p className="text-gray-500 text-center py-4">No maintenance tasks found</p>
                   ) : (
