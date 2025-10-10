@@ -341,12 +341,21 @@ def process_work_order(query_str, anomaly_image_path):
 
     vision_response = process_vision_first_prompt(query_str, anomaly_image_path)
 
+    print("📋" + "="*60)
+    print("📋 PROCESSING VISION RESPONSE FOR WORK ORDER")
+    print("📋" + "="*60)
+    
     if hasattr(vision_response, "get_json"):
         vision_json = vision_response.get_json()
         vision_result_str = vision_json.get("response", "No response key found")
-        print("Vision model JSON result in process_work_order:", vision_result_str)
+        print("📋 Vision model JSON result in process_work_order:")
+        print("📋" + "-"*40)
+        print(vision_result_str)
+        print("📋" + "-"*40)
     else:
-        print("Vision model result in process_work_order:", vision_response)
+        print("📋 Vision model result in process_work_order:", vision_response)
+    
+    print("📋" + "="*60)
 
     workorder_prompt = (
         "This is the analysis of the anomaly: \n"
@@ -521,12 +530,22 @@ def process_work_order(query_str, anomaly_image_path):
     )
 
     workorder_response = final_response.choices[0].message.content
-    print("Work order response:", workorder_response)
+    
+    print("📄" + "="*60)
+    print("📄 FINAL WORK ORDER RESPONSE FROM OPENAI")
+    print("📄" + "="*60)
+    print(f"📄 Response length: {len(workorder_response)} characters")
+    print("📄 Full work order response:")
+    print("📄" + "-"*40)
+    print(workorder_response)
+    print("📄" + "-"*40)
+    print("📄" + "="*60)
 
     try:
         workorder_dict = json.loads(workorder_response)
+        print("✅ Successfully parsed work order as JSON")
     except Exception as e:
-        print("Failed to parse workorder as JSON:", e)
+        print("❌ Failed to parse workorder as JSON:", e)
         workorder_dict = {"raw": workorder_response}
 
     # --- UNWRAP 'work_order' KEY IF PRESENT ---
@@ -551,6 +570,14 @@ def process_vision_first_prompt(query_str, image_path):
 
     encoded_image = encode_image_to_base64(image_path)
     
+    print("🖼️" + "="*60)
+    print("🖼️ SENDING IMAGE TO OPENAI VISION")
+    print("🖼️" + "="*60)
+    print(f"🖼️ Image path: {image_path}")
+    print(f"🖼️ Image encoded length: {len(encoded_image)} characters")
+    print(f"🖼️ Prompt: 'You are an expert in industrial machine diagnostics. Analyze the attached image of a machine anomaly. List the top five likely causes in bullet points.'")
+    print("🖼️" + "="*60)
+    
     final_response = openai.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -571,7 +598,16 @@ def process_vision_first_prompt(query_str, image_path):
         ],
         max_tokens=300
     )
-    print("Vision model response in here:", final_response.choices[0].message.content)
+    
+    print("🤖" + "="*60)
+    print("🤖 OPENAI VISION RESPONSE RECEIVED")
+    print("🤖" + "="*60)
+    print(f"🤖 Response length: {len(final_response.choices[0].message.content)} characters")
+    print(f"🤖 Full response:")
+    print("🤖" + "-"*40)
+    print(final_response.choices[0].message.content)
+    print("🤖" + "-"*40)
+    print("🤖" + "="*60)
     return finalize_vision_response(final_response)
 
 @log_time
