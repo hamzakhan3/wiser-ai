@@ -55,7 +55,7 @@ export interface MaintenanceTask {
   scheduledDate: string;
   duration: number;
   priority: 'low' | 'medium' | 'high' | 'critical';
-  status: 'scheduled' | 'in-progress' | 'completed' | 'overdue';
+  status: 'scheduled' | 'in-progress' | 'resolved' | 'overdue';
   assignedTechnician?: string;
 }
 

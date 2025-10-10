@@ -55,7 +55,7 @@ const MaintenanceSchedulePage = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800';
+      case 'resolved': return 'bg-[#437874] text-white';
       case 'in-progress': return 'bg-blue-100 text-blue-800';
       case 'overdue': return 'bg-red-100 text-red-800';
       case 'scheduled': return 'bg-gray-100 text-gray-800';
@@ -89,12 +89,12 @@ const MaintenanceSchedulePage = () => {
   if (action === 'resolve') {
     setMaintenanceTasks(prev =>
       prev.map(task =>
-        task.id === taskId ? { ...task, status: 'completed' } : task
+        task.id === taskId ? { ...task, status: 'resolved' } : task
       )
     );
     toast({
       title: "Task Resolved",
-      description: "Maintenance task has been marked as completed.",
+      description: "Maintenance task has been marked as resolved.",
     });
     return;
   }
@@ -279,7 +279,7 @@ const MaintenanceSchedulePage = () => {
                             </div>
                                   <div
                                     className={`w-3 h-3 rounded-full ${
-                                      task.status === 'completed'
+                                      task.status === 'resolved'
                                           ? 'bg-sage-500'
                                           : task.status === 'scheduled'
                                           ? 'bg-gray-400'
@@ -351,7 +351,7 @@ const MaintenanceSchedulePage = () => {
                                 </Badge>
                                     <div
                                       className={`w-3 h-3 rounded-full ${
-                                        task.status === 'completed'
+                                        task.status === 'resolved'
                                           ? 'bg-sage-500'
                                           : task.status === 'scheduled'
                                           ? 'bg-gray-400'
