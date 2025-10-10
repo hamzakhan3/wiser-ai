@@ -144,7 +144,20 @@ const MaintenanceSchedulePage = () => {
               <div className="flex items-center space-x-3">
                 <CalendarDays className="h-8 w-8 text-sage-500" />
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Preventive Maintenance Scheduler</h1>
+                  <h1 
+                    style={{
+                      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                      fontWeight: 500,
+                      fontSize: '28px',
+                      lineHeight: '1.2',
+                      letterSpacing: '-0.02em',
+                      color: '#2d3748',
+                      textTransform: 'none',
+                      textAlign: 'left'
+                    }}
+                  >
+                    Preventive Maintenance Scheduler
+                  </h1>
                   <p className="text-gray-600">Schedule and track machine maintenance tasks</p>
                 </div>
               </div>
@@ -169,26 +182,45 @@ const MaintenanceSchedulePage = () => {
             <div className="flex items-center space-x-3">
               <CalendarDays className="h-8 w-8 text-sage-500" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Preventive Maintenance Scheduler</h1>
+                <h1 
+                  style={{
+                    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                    fontWeight: 500,
+                    fontSize: '28px',
+                    lineHeight: '1.2',
+                    letterSpacing: '-0.02em',
+                    color: '#2d3748',
+                    textTransform: 'none',
+                    textAlign: 'left'
+                  }}
+                >
+                  Preventive Maintenance Scheduler
+                </h1>
                 <p className="text-gray-600">Schedule and track machine maintenance tasks</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <Button 
-                variant={viewMode === 'calendar' ? 'default' : 'outline'}
+            <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-0.5 mt-6 ml-auto">
+              <button
                 onClick={() => setViewMode('calendar')}
-                className="bg-sage-500 hover:bg-sage-600"
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'calendar'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
               >
                 Calendar View
-              </Button>
-              <Button 
-                variant={viewMode === 'list' ? 'default' : 'outline'}
+              </button>
+              <button
                 onClick={() => setViewMode('list')}
-                className="bg-sage-500 hover:bg-sage-600"
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
               >
                 List View
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -288,7 +320,20 @@ const MaintenanceSchedulePage = () => {
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>All Scheduled Maintenance Tasks</CardTitle>
+                  <CardTitle 
+                    style={{
+                      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                      fontWeight: 500,
+                      fontSize: '28px',
+                      lineHeight: '1.2',
+                      letterSpacing: '-0.02em',
+                      color: '#2d3748',
+                      textTransform: 'none',
+                      textAlign: 'left'
+                    }}
+                  >
+                    All Scheduled Maintenance Tasks
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {maintenanceTasks.length === 0 ? (

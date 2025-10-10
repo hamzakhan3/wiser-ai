@@ -195,11 +195,21 @@ const MachineHealthPage = () => {
       <WisdomSidebar />
       <div className="flex-1 bg-gray-50 p-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Machine Health Monitor</h1>
-            <Button onClick={fetchMachineData} disabled={isLoading}>
-              {isLoading ? 'Refreshing...' : 'Refresh Data'}
-            </Button>
+          <div className="mb-8">
+            <h1 
+              style={{
+                fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                fontWeight: 500,
+                fontSize: '28px',
+                lineHeight: '1.2',
+                letterSpacing: '-0.02em',
+                color: '#2d3748',
+                textTransform: 'none',
+                textAlign: 'left'
+              }}
+            >
+              Machine Health Monitor
+            </h1>
           </div>
           
           {isLoading ? (
@@ -208,8 +218,7 @@ const MachineHealthPage = () => {
             </div>
           ) : error ? (
             <div className="text-center py-8">
-              <p className="text-red-500 mb-4">{error}</p>
-              <Button onClick={fetchMachineData}>Try Again</Button>
+              <p className="text-red-500">{error}</p>
             </div>
           ) : machines.length > 0 ? (
             <div className="bg-white rounded-lg shadow">
@@ -235,9 +244,10 @@ const MachineHealthPage = () => {
                       <TableCell className="font-medium">{machine.machine}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          machine.severityLevel === 'CRITICAL' ? 'bg-red-200 text-red-900 font-bold' :
-                          machine.severityLevel === 'High' ? 'bg-red-100 text-red-800' :
-                          machine.severityLevel === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                          machine.severityLevel?.toUpperCase() === 'CRITICAL' ? 'bg-red-200 text-red-900 font-bold' :
+                          machine.severityLevel?.toUpperCase() === 'WARNING' ? 'bg-yellow-200 text-yellow-900 font-bold' :
+                          machine.severityLevel?.toUpperCase() === 'HIGH' ? 'bg-red-100 text-red-800' :
+                          machine.severityLevel?.toUpperCase() === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-green-100 text-green-800'
                         }`}>
                           {machine.severityLevel}
