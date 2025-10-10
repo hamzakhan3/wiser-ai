@@ -145,9 +145,7 @@ sql_database = SQLDatabase(
         # Add troubleshooting and resolution tables:
         "machine_troubleshooting", "maintenance_procedures", 
         "machine_parts_inventory", "machine_issue_history",
-        "machine_performance_benchmarks",
-        # Add vision analysis table:
-        "machine_vision_analysis"
+        "machine_performance_benchmarks"
     ]
 )
 
@@ -168,9 +166,7 @@ query_engine = NLSQLTableQueryEngine(
         # Add troubleshooting and resolution tables:
         "machine_troubleshooting", "maintenance_procedures", 
         "machine_parts_inventory", "machine_issue_history",
-        "machine_performance_benchmarks",
-        # Add vision analysis table:
-        "machine_vision_analysis"
+        "machine_performance_benchmarks"
     ], 
     llm=None,
     verbose=False  # Disable verbose for better performance
@@ -208,7 +204,13 @@ def query():
             print(f"🔍 Machine ID: {machine_id}")
             image_url = get_machine_image_url(machine_id)
             print(f"🔍 Image URL: {image_url}")
-            return handle_anomaly_source(query_str, image_url)
+            
+            # Fallback to default image if no image found
+            if image_url is None:
+                image_url = "/Users/khanhamza/Desktop/image3.png"
+                print(f"🔍 Using fallback image: {image_url}")
+            
+            return handle_anomaly_source(query_str, image_url, machine_id)
         
         if stream:
             # Return streaming response
@@ -296,17 +298,17 @@ def cache_response(key, response):
 
 
 
-def handle_anomaly_source(query_str, image_url):
+def handle_anomaly_source(query_str, image_url, machine_id=None):
     global first_prompt, final_prompt
     queue = vision_responses
     intent = get_intent_for_workorder(query_str)
     
     if intent == "yes":
-        return process_work_order(query_str, image_url)
+        return process_work_order(query_str, image_url, machine_id)
     
     if first_prompt == 1:
         first_prompt = 0
-        return process_vision_first_prompt(query_str, image_url)
+        return process_vision_first_prompt(query_str, image_url, machine_id)
     else:
         return process_vision_followup(query_str)
 
@@ -335,31 +337,23 @@ def encode_image_to_base64(image_path):
         return base64.b64encode(f.read()).decode("utf-8")
 
 @log_time
-def process_work_order(query_str, anomaly_image_path):
+def process_work_order(query_str, anomaly_image_path, machine_id=None):
     import json
 
     image_path_workorder = "/Users/khanhamza/Desktop/image4.png"
     print("Image paths:", image_path_workorder, anomaly_image_path)
+    print("Machine ID for work order:", machine_id)
 
     query_str = "."
 
-    vision_response = process_vision_first_prompt(query_str, anomaly_image_path)
+    vision_response = process_vision_first_prompt(query_str, anomaly_image_path, machine_id)
 
-    print("📋" + "="*60)
-    print("📋 PROCESSING VISION RESPONSE FOR WORK ORDER")
-    print("📋" + "="*60)
-    
     if hasattr(vision_response, "get_json"):
         vision_json = vision_response.get_json()
         vision_result_str = vision_json.get("response", "No response key found")
-        print("📋 Vision model JSON result in process_work_order:")
-        print("📋" + "-"*40)
-        print(vision_result_str)
-        print("📋" + "-"*40)
+        print("Vision model JSON result in process_work_order:", vision_result_str)
     else:
-        print("📋 Vision model result in process_work_order:", vision_response)
-    
-    print("📋" + "="*60)
+        print("Vision model result in process_work_order:", vision_response)
 
     workorder_prompt = (
         "This is the analysis of the anomaly: \n"
@@ -534,22 +528,12 @@ def process_work_order(query_str, anomaly_image_path):
     )
 
     workorder_response = final_response.choices[0].message.content
-    
-    print("📄" + "="*60)
-    print("📄 FINAL WORK ORDER RESPONSE FROM OPENAI")
-    print("📄" + "="*60)
-    print(f"📄 Response length: {len(workorder_response)} characters")
-    print("📄 Full work order response:")
-    print("📄" + "-"*40)
-    print(workorder_response)
-    print("📄" + "-"*40)
-    print("📄" + "="*60)
+    print("Work order response:", workorder_response)
 
     try:
         workorder_dict = json.loads(workorder_response)
-        print("✅ Successfully parsed work order as JSON")
     except Exception as e:
-        print("❌ Failed to parse workorder as JSON:", e)
+        print("Failed to parse workorder as JSON:", e)
         workorder_dict = {"raw": workorder_response}
 
     # --- UNWRAP 'work_order' KEY IF PRESENT ---
@@ -569,7 +553,7 @@ def get_image_fingerprint(image_path):
     return str(imagehash.phash(img))  # Perceptual hash
 
 @log_time
-def process_vision_first_prompt(query_str, image_path):
+def process_vision_first_prompt(query_str, image_path, machine_id=None):
     queue = vision_responses
 
     # 🚀 DATABASE-FIRST APPROACH - CHECK DB BEFORE OPENAI CALL
@@ -577,19 +561,31 @@ def process_vision_first_prompt(query_str, image_path):
     print("🖼️ CHECKING DATABASE FOR CACHED VISION ANALYSIS")
     print("🖼️" + "="*60)
     print(f"🖼️ Image path: {image_path}")
+    print(f"🖼️ Machine ID: {machine_id}")
     print("🖼️" + "="*60)
     
     try:
         # Try to get analysis from database first
         with engine.connect() as conn:
-            # Extract machine_id from the image path or use a default
-            machine_id = "09ce4fec-8de8-4c1e-a987-9a0080313456"  # Default for now
+            # Use provided machine_id or fallback to default
+            if machine_id is None:
+                machine_id = "09ce4fec-8de8-4c1e-a987-9a0080313456"  # Default fallback
+                print(f"🖼️ No machine_id provided, using default: {machine_id}")
             
+            # Try exact match first
             result = conn.execute(
                 text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :image_path"),
                 {"machine_id": machine_id, "image_path": image_path}
             )
             row = result.fetchone()
+            
+            # If no exact match, try with fallback image path
+            if not row and image_path != "/Users/khanhamza/Desktop/image3.png":
+                result = conn.execute(
+                    text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :fallback_path"),
+                    {"machine_id": machine_id, "fallback_path": "/Users/khanhamza/Desktop/image3.png"}
+                )
+                row = result.fetchone()
             
             if row:
                 cached_analysis = row[0]
