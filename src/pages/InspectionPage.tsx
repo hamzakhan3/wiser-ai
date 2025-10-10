@@ -313,10 +313,32 @@ const InspectionPage = () => {
                     <ArrowLeft size={16} />
                     Back to Machine Health
                   </Button>
-                  <h1 className="text-2xl font-bold text-gray-900">
+                  <h1 
+                    style={{
+                      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                      fontWeight: 500,
+                      fontSize: '28px',
+                      lineHeight: '1.2',
+                      letterSpacing: '-0.02em',
+                      color: '#2d3748',
+                      textTransform: 'none',
+                      textAlign: 'left'
+                    }}
+                  >
                     Anomaly Inspection
                     {searchParams.get('machineName') && (
-                      <span className="text-lg font-normal text-gray-600 ml-2">
+                      <span 
+                        style={{
+                          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                          fontWeight: 400,
+                          fontSize: '18px',
+                          lineHeight: '1.2',
+                          letterSpacing: '-0.02em',
+                          color: '#6b7280',
+                          textTransform: 'none'
+                        }}
+                        className="ml-2"
+                      >
                         - {searchParams.get('machineName')}
                       </span>
                     )}

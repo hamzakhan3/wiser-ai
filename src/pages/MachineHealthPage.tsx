@@ -263,6 +263,15 @@ const MachineHealthPage = () => {
                             e.stopPropagation();
                             handleInspectAnomaly(machine);
                           }}
+                          style={{
+                            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                            fontWeight: 500,
+                            fontSize: '14px',
+                            lineHeight: '1.2',
+                            letterSpacing: '-0.02em',
+                            color: '#2d3748',
+                            textTransform: 'none'
+                          }}
                         >
                           Inspect Anomaly
                         </Button>

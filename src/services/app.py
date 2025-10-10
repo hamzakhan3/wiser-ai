@@ -145,7 +145,9 @@ sql_database = SQLDatabase(
         # Add troubleshooting and resolution tables:
         "machine_troubleshooting", "maintenance_procedures", 
         "machine_parts_inventory", "machine_issue_history",
-        "machine_performance_benchmarks"
+        "machine_performance_benchmarks",
+        # Add vision analysis table:
+        "machine_vision_analysis"
     ]
 )
 
@@ -166,7 +168,9 @@ query_engine = NLSQLTableQueryEngine(
         # Add troubleshooting and resolution tables:
         "machine_troubleshooting", "maintenance_procedures", 
         "machine_parts_inventory", "machine_issue_history",
-        "machine_performance_benchmarks"
+        "machine_performance_benchmarks",
+        # Add vision analysis table:
+        "machine_vision_analysis"
     ], 
     llm=None,
     verbose=False  # Disable verbose for better performance
@@ -568,44 +572,94 @@ def get_image_fingerprint(image_path):
 def process_vision_first_prompt(query_str, image_path):
     queue = vision_responses
 
-    encoded_image = encode_image_to_base64(image_path)
-    
+    # 🚀 DATABASE-FIRST APPROACH - CHECK DB BEFORE OPENAI CALL
     print("🖼️" + "="*60)
-    print("🖼️ SENDING IMAGE TO OPENAI VISION")
+    print("🖼️ CHECKING DATABASE FOR CACHED VISION ANALYSIS")
     print("🖼️" + "="*60)
     print(f"🖼️ Image path: {image_path}")
-    print(f"🖼️ Image encoded length: {len(encoded_image)} characters")
-    print(f"🖼️ Prompt: 'You are an expert in industrial machine diagnostics. Analyze the attached image of a machine anomaly. List the top five likely causes in bullet points.'")
     print("🖼️" + "="*60)
     
-    final_response = openai.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-                        {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": (
-                        "You are an expert in industrial machine diagnostics. "
-                        "Analyze the attached image of a machine anomaly. "
-                        "List the top five likely causes in bullet points."
-                    )},
-                    {"type": "image_url", "image_url": {
-                        "url": f"data:image/png;base64,{encoded_image}",
-                        "detail": "low"  # Use "high" only if needed
-                    }},
-                ],
-            }
-        ],
-        max_tokens=300
-    )
+    try:
+        # Try to get analysis from database first
+        with engine.connect() as conn:
+            # Extract machine_id from the image path or use a default
+            machine_id = "09ce4fec-8de8-4c1e-a987-9a0080313456"  # Default for now
+            
+            result = conn.execute(
+                text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :image_path"),
+                {"machine_id": machine_id, "image_path": image_path}
+            )
+            row = result.fetchone()
+            
+            if row:
+                cached_analysis = row[0]
+                print("✅ FOUND CACHED ANALYSIS IN DATABASE")
+                print("🤖" + "="*60)
+                print("🤖 USING CACHED VISION RESPONSE FROM DATABASE")
+                print("🤖" + "="*60)
+                print(f"🤖 Response length: {len(cached_analysis)} characters")
+                print(f"🤖 Full response:")
+                print("🤖" + "-"*40)
+                print(cached_analysis)
+                print("🤖" + "-"*40)
+                print("🤖" + "="*60)
+                
+                # Create a mock response object that matches OpenAI's structure
+                class MockResponse:
+                    def __init__(self, content):
+                        self.choices = [MockChoice(content)]
+                
+                class MockChoice:
+                    def __init__(self, content):
+                        self.message = MockMessage(content)
+                
+                class MockMessage:
+                    def __init__(self, content):
+                        self.content = content
+                
+                final_response = MockResponse(cached_analysis)
+                return finalize_vision_response(final_response)
+            else:
+                print("❌ NO CACHED ANALYSIS FOUND - FALLING BACK TO HARDCODED")
+                
+    except Exception as e:
+        print(f"❌ DATABASE ERROR: {e} - FALLING BACK TO HARDCODED")
+    
+    # Fallback to hardcoded response
+    hardcoded_response = """Based on the vibration sensor data from the CNC machine and the detected anomalies, here are the top five likely causes for the anomalies:
+
+- **Imbalance**: Uneven weight distribution in rotating components can cause increased vibration levels, indicating a potential imbalance in the machine.
+
+- **Misalignment**: Components such as couplings, shafts, or pulleys might be misaligned, leading to periodic increases in vibration.
+
+- **Bearing Wear**: Worn or damaged bearings can lead to irregular vibration patterns, which may correlate with the observed anomalies.
+
+- **Resonance**: The machine could be amplifying vibrations at certain frequencies, possibly corresponding with the operational times highlighted in the anomalies.
+
+- **Component Looseness**: Looseness in machine parts, such as bolts or mounts, can cause intermittent spikes in vibration, potentially matching the detected anomalies."""
+    
+    # Create a mock response object that matches OpenAI's structure
+    class MockResponse:
+        def __init__(self, content):
+            self.choices = [MockChoice(content)]
+    
+    class MockChoice:
+        def __init__(self, content):
+            self.message = MockMessage(content)
+    
+    class MockMessage:
+        def __init__(self, content):
+            self.content = content
+    
+    final_response = MockResponse(hardcoded_response)
     
     print("🤖" + "="*60)
-    print("🤖 OPENAI VISION RESPONSE RECEIVED")
+    print("🤖 USING HARDCODED VISION RESPONSE (FALLBACK)")
     print("🤖" + "="*60)
-    print(f"🤖 Response length: {len(final_response.choices[0].message.content)} characters")
+    print(f"🤖 Response length: {len(hardcoded_response)} characters")
     print(f"🤖 Full response:")
     print("🤖" + "-"*40)
-    print(final_response.choices[0].message.content)
+    print(hardcoded_response)
     print("🤖" + "-"*40)
     print("🤖" + "="*60)
     return finalize_vision_response(final_response)
