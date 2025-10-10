@@ -277,19 +277,6 @@ const MaintenanceSchedulePage = () => {
                               <h4 className="font-medium text-gray-900">{task.machineName}</h4>
                               <p className="text-sm text-gray-600">{task.taskType}</p>
                             </div>
-                                  <div
-                                    className={`w-3 h-3 rounded-full ${
-                                      task.status === 'resolved'
-                                          ? 'bg-sage-500'
-                                          : task.status === 'scheduled'
-                                          ? 'bg-gray-400'
-                                          : task.status === 'in-progress'
-                                          ? 'bg-blue-500'
-                                          : getPriorityColor(task.priority)
-
-                                    }`}
-                                  />                          
-                                  </div>
                           
                           <p className="text-sm text-gray-500 mb-2">{task.description}</p>
                           
@@ -349,17 +336,7 @@ const MaintenanceSchedulePage = () => {
                                 <Badge className={getStatusColor(task.status)}>
                                   {task.status}
                                 </Badge>
-                                    <div
-                                      className={`w-3 h-3 rounded-full ${
-                                        task.status === 'resolved'
-                                          ? 'bg-sage-500'
-                                          : task.status === 'scheduled'
-                                          ? 'bg-gray-400'
-                                          : task.status === 'in-progress'
-                                          ? 'bg-blue-500'
-                                          : getPriorityColor(task.priority)
-                                      }`}
-                                    />                             </div>
+                              </div>
                               
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                 <div>
