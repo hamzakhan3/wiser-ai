@@ -199,16 +199,12 @@ def query():
             return jsonify({"error": "Query string is required"}), 400
         
         if source == "anomaly":
-            print("🔍 Handling anomaly source")
             machine_id = data.get("machine_id")
-            print(f"🔍 Machine ID: {machine_id}")
             image_url = get_machine_image_url(machine_id)
-            print(f"🔍 Image URL: {image_url}")
             
             # Fallback to default image if no image found
             if image_url is None:
                 image_url = "/Users/khanhamza/Desktop/image3.png"
-                print(f"🔍 Using fallback image: {image_url}")
             
             return handle_anomaly_source(query_str, image_url, machine_id)
         
@@ -244,11 +240,9 @@ def get_machine_image_url(machine_id):
         stmt = select(machine).where(machine.c.machine_id == uuid.UUID(machine_id))
 
         with engine.connect() as conn:
-            print(f"🔍 Executing SQL: {stmt}")
             machine_row = conn.execute(stmt).mappings().first()
         
         if machine_row and "image_url" in machine_row and machine_row["image_url"]:
-            print("Image URL for this machine:", machine_row["image_url"])
             return machine_row["image_url"]
         
         # If no image in database, look for the most recent image in file system
@@ -273,14 +267,11 @@ def get_machine_image_url(machine_id):
                                         most_recent_image = filepath
             
             if most_recent_image:
-                print("Most recent image found:", most_recent_image)
                 return most_recent_image
         
-        print("No image found for this machine.")
         return None
         
     except Exception as e:
-        print(f"Error getting machine image: {e}")
         return None
     
 
@@ -341,8 +332,6 @@ def process_work_order(query_str, anomaly_image_path, machine_id=None):
     import json
 
     image_path_workorder = "/Users/khanhamza/Desktop/image4.png"
-    print("Image paths:", image_path_workorder, anomaly_image_path)
-    print("Machine ID for work order:", machine_id)
 
     query_str = "."
 
@@ -351,9 +340,8 @@ def process_work_order(query_str, anomaly_image_path, machine_id=None):
     if hasattr(vision_response, "get_json"):
         vision_json = vision_response.get_json()
         vision_result_str = vision_json.get("response", "No response key found")
-        print("Vision model JSON result in process_work_order:", vision_result_str)
     else:
-        print("Vision model result in process_work_order:", vision_response)
+        vision_result_str = str(vision_response)
 
     workorder_prompt = (
         "This is the analysis of the anomaly: \n"
@@ -528,12 +516,10 @@ def process_work_order(query_str, anomaly_image_path, machine_id=None):
     )
 
     workorder_response = final_response.choices[0].message.content
-    print("Work order response:", workorder_response)
 
     try:
         workorder_dict = json.loads(workorder_response)
     except Exception as e:
-        print("Failed to parse workorder as JSON:", e)
         workorder_dict = {"raw": workorder_response}
 
     # --- UNWRAP 'work_order' KEY IF PRESENT ---
@@ -557,12 +543,6 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None):
     queue = vision_responses
 
     # 🚀 DATABASE-FIRST APPROACH - CHECK DB BEFORE OPENAI CALL
-    print("🖼️" + "="*60)
-    print("🖼️ CHECKING DATABASE FOR CACHED VISION ANALYSIS")
-    print("🖼️" + "="*60)
-    print(f"🖼️ Image path: {image_path}")
-    print(f"🖼️ Machine ID: {machine_id}")
-    print("🖼️" + "="*60)
     
     try:
         # Try to get analysis from database first
@@ -570,7 +550,6 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None):
             # Use provided machine_id or fallback to default
             if machine_id is None:
                 machine_id = "09ce4fec-8de8-4c1e-a987-9a0080313456"  # Default fallback
-                print(f"🖼️ No machine_id provided, using default: {machine_id}")
             
             # Try exact match first
             result = conn.execute(
@@ -589,16 +568,6 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None):
             
             if row:
                 cached_analysis = row[0]
-                print("✅ FOUND CACHED ANALYSIS IN DATABASE")
-                print("🤖" + "="*60)
-                print("🤖 USING CACHED VISION RESPONSE FROM DATABASE")
-                print("🤖" + "="*60)
-                print(f"🤖 Response length: {len(cached_analysis)} characters")
-                print(f"🤖 Full response:")
-                print("🤖" + "-"*40)
-                print(cached_analysis)
-                print("🤖" + "-"*40)
-                print("🤖" + "="*60)
                 
                 # Create a mock response object that matches OpenAI's structure
                 class MockResponse:
@@ -615,11 +584,9 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None):
                 
                 final_response = MockResponse(cached_analysis)
                 return finalize_vision_response(final_response)
-            else:
-                print("❌ NO CACHED ANALYSIS FOUND - FALLING BACK TO HARDCODED")
                 
     except Exception as e:
-        print(f"❌ DATABASE ERROR: {e} - FALLING BACK TO HARDCODED")
+        pass  # Fall back to hardcoded response
     
     # Fallback to hardcoded response
     hardcoded_response = """Based on the vibration sensor data from the CNC machine and the detected anomalies, here are the top five likely causes for the anomalies:
@@ -648,16 +615,6 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None):
             self.content = content
     
     final_response = MockResponse(hardcoded_response)
-    
-    print("🤖" + "="*60)
-    print("🤖 USING HARDCODED VISION RESPONSE (FALLBACK)")
-    print("🤖" + "="*60)
-    print(f"🤖 Response length: {len(hardcoded_response)} characters")
-    print(f"🤖 Full response:")
-    print("🤖" + "-"*40)
-    print(hardcoded_response)
-    print("🤖" + "-"*40)
-    print("🤖" + "="*60)
     return finalize_vision_response(final_response)
 
 @log_time
