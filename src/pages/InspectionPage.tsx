@@ -42,8 +42,7 @@ const InspectionPage = () => {
   const samplePrompts = [
     "What could be causing these vibration anomalies?",
     "Analyze the pattern of anomalies in this data",
-    "Do you want to generate a work order?",
-    "How severe are these detected anomalies?"
+    "Do you want to generate a work order?"
   ];
 
   const fetchGraphData = async (currentFilters?: InspectionFilters) => {
@@ -573,16 +572,30 @@ const InspectionPage = () => {
                       {/* Sample prompts */}
                       <div className="mt-6 mb-4">
                         <p className="text-sm text-gray-600 mb-3">Try asking:</p>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {samplePrompts.map((prompt, index) => (
-                            <Button
+                            <button
                               key={index}
-                              variant="outline"
-                              className="text-left h-auto p-3 bg-white hover:bg-sage-50 border-sage-200 text-gray-700 justify-start"
                               onClick={() => handleSamplePromptClick(prompt)}
+                              className="flex items-center justify-center bg-[#EDF2F2] rounded-lg p-4 hover:bg-[#E0E8E8] transition-colors duration-200"
+                              style={{
+                                minHeight: '60px',
+                                borderRadius: '8px'
+                              }}
                             >
-                              {prompt}
-                            </Button>
+                              <span 
+                                className="text-center font-medium"
+                                style={{
+                                  fontFamily: 'Space Grotesk, Inter, sans-serif',
+                                  fontSize: '14px',
+                                  lineHeight: '1.4',
+                                  color: '#36635F',
+                                  textTransform: 'none'
+                                }}
+                              >
+                                {prompt}
+                              </span>
+                            </button>
                           ))}
                         </div>
                       </div>
