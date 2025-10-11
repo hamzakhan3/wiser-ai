@@ -55,14 +55,15 @@ export interface MaintenanceTask {
   scheduledDate: string;
   duration: number;
   priority: 'low' | 'medium' | 'high' | 'critical';
-  status: 'scheduled' | 'in-progress' | 'resolved' | 'overdue';
+  status: 'Scheduled' | 'in-progress' | 'resolved' | 'overdue';
   assignedTechnician?: string;
 }
 
-export async function sendQuery(query: string, source?: string, machineId?: string): Promise<QueryResponse> {
+export async function sendQuery(query: string, source?: string, machineId?: string, sensorType?: string): Promise<QueryResponse> {
   console.log(`sendQuery called with query: ${query}`);
   console.log(`Source: ${source || 'unknown'}`);
   console.log(`Machine ID: ${machineId || 'not provided'}`);
+  console.log(`Sensor Type: ${sensorType || 'not provided'}`);
   console.log(`Sending POST request to: ${API_URL}/query`);
 
   const payload: any = { 
@@ -71,10 +72,14 @@ export async function sendQuery(query: string, source?: string, machineId?: stri
     responseFormat: 'markdown' // Request markdown format from backend
   };
   
-  // Add machine_id to payload if we're on anomaly inspection page and have machine data
+  // Add machine_id and sensor_type to payload if we're on anomaly inspection page and have machine data
   if (source === 'anomaly' && machineId) {
     payload.machine_id = machineId;
     console.log('✅ Added machine_id to query payload:', machineId);
+  }
+  if (sensorType) {
+    payload.sensor_type = sensorType;
+    console.log('✅ Added sensor_type to query payload:', sensorType);
   }
   
   console.log('Request payload:', JSON.stringify(payload, null, 2));
@@ -294,17 +299,29 @@ export async function streamQuery(
   source?: string, 
   onChunk?: (chunk: string) => void,
   onStatus?: (status: string) => void,
-  onComplete?: () => void
+  onComplete?: () => void,
+  machineId?: string,
+  sensorType?: string
 ): Promise<void> {
   console.log(`streamQuery called with query: ${query}`);
   console.log(`Source: ${source || 'unknown'}`);
+  console.log(`Machine ID: ${machineId || 'not provided'}`);
+  console.log(`Sensor Type: ${sensorType || 'not provided'}`);
 
-  const payload = { 
+  const payload: any = { 
     query,
     source: source || 'unknown',
     responseFormat: 'markdown',
     stream: true  // Enable streaming
   };
+
+  // Add machine_id and sensor_type if provided
+  if (machineId) {
+    payload.machine_id = machineId;
+  }
+  if (sensorType) {
+    payload.sensor_type = sensorType;
+  }
   
   console.log('Request payload:', JSON.stringify(payload, null, 2));
 

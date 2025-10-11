@@ -40,7 +40,11 @@ const MaintenanceSchedulePage = () => {
   }, [toast]);
 
   const getTasksForDate = (date: Date) => {
-    return maintenanceTasks.filter(task => isSameDay(new Date(task.scheduledDate), date));
+    return maintenanceTasks.filter(task => {
+      // Parse the date string as YYYY-MM-DD format (no timezone conversion)
+      const taskDate = new Date(task.scheduledDate + 'T00:00:00');
+      return isSameDay(taskDate, date);
+    });
   };
 
   const getPriorityColor = (priority: string) => {
@@ -58,14 +62,14 @@ const MaintenanceSchedulePage = () => {
       case 'resolved': return 'bg-[#437874] text-white';
       case 'in-progress': return 'bg-blue-100 text-blue-800';
       case 'overdue': return 'bg-red-100 text-red-800';
-      case 'scheduled': return 'bg-gray-100 text-gray-800';
+      case 'Scheduled': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   // Get dates that have maintenance tasks for the main calendar
   const getDatesWithTasks = () => {
-    return maintenanceTasks.map(task => new Date(task.scheduledDate));
+    return maintenanceTasks.map(task => new Date(task.scheduledDate + 'T00:00:00'));
   };
 
   const datesWithTasks = getDatesWithTasks();
@@ -340,7 +344,7 @@ const MaintenanceSchedulePage = () => {
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Date:</span>
-                                  <p className="font-medium">{format(new Date(task.scheduledDate), 'MMM dd, yyyy')}</p>
+                                  <p className="font-medium">{format(new Date(task.scheduledDate + 'T00:00:00'), 'MMM dd, yyyy')}</p>
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Duration:</span>

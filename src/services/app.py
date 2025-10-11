@@ -12,7 +12,7 @@ import openai
 from sqlalchemy import Table, MetaData, insert
 from llama_index.core import SQLDatabase
 from llama_index.llms.openai import OpenAI
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 import uuid
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import insert
@@ -154,8 +154,8 @@ query_engine = NLSQLTableQueryEngine(
     sql_database=sql_database, 
     tables=[
         "lab", "users", "node", "machine", "lab_user", 
-        "current_sensor", "shift_machine_production", "maintenance_schedule", 
-        "maintenance_parts", "critical_health_machine",
+        "current_sensor", "shift_machine_production", 
+        "critical_health_machine",
         # Add these for root cause analysis:
         "temperature_sensor", "humidity_sensor", "machine_current_log",
         "anomalies", "anomaly_detections", "inference_data",
@@ -200,13 +200,17 @@ def query():
         
         if source == "anomaly":
             machine_id = data.get("machine_id")
+            sensor_type = data.get("sensor_type", "Vibration")  # Default to Vibration
             image_url = get_machine_image_url(machine_id)
+            
+            print(f"🔍 Anomaly query - Machine ID: {machine_id}, Sensor Type: {sensor_type}, Image URL: {image_url}")
             
             # Fallback to default image if no image found
             if image_url is None:
                 image_url = "/Users/khanhamza/Desktop/image3.png"
+                print(f"🔄 Using fallback image: {image_url}")
             
-            return handle_anomaly_source(query_str, image_url, machine_id)
+            return handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
         
         if stream:
             # Return streaming response
@@ -289,17 +293,17 @@ def cache_response(key, response):
 
 
 
-def handle_anomaly_source(query_str, image_url, machine_id=None):
+def handle_anomaly_source(query_str, image_url, machine_id=None, sensor_type="Vibration"):
     global first_prompt, final_prompt
     queue = vision_responses
     intent = get_intent_for_workorder(query_str)
     
     if intent == "yes":
-        return process_work_order(query_str, image_url, machine_id)
+        return process_work_order(query_str, image_url, machine_id, sensor_type)
     
     if first_prompt == 1:
         first_prompt = 0
-        return process_vision_first_prompt(query_str, image_url, machine_id)
+        return process_vision_first_prompt(query_str, image_url, machine_id, sensor_type)
     else:
         return process_vision_followup(query_str)
 
@@ -328,14 +332,14 @@ def encode_image_to_base64(image_path):
         return base64.b64encode(f.read()).decode("utf-8")
 
 @log_time
-def process_work_order(query_str, anomaly_image_path, machine_id=None):
+def process_work_order(query_str, anomaly_image_path, machine_id=None, sensor_type="Vibration"):
     import json
 
     image_path_workorder = "/Users/khanhamza/Desktop/image4.png"
 
     query_str = "."
 
-    vision_response = process_vision_first_prompt(query_str, anomaly_image_path, machine_id)
+    vision_response = process_vision_first_prompt(query_str, anomaly_image_path, machine_id, sensor_type)
 
     if hasattr(vision_response, "get_json"):
         vision_json = vision_response.get_json()
@@ -539,7 +543,7 @@ def get_image_fingerprint(image_path):
     return str(imagehash.phash(img))  # Perceptual hash
 
 @log_time
-def process_vision_first_prompt(query_str, image_path, machine_id=None):
+def process_vision_first_prompt(query_str, image_path, machine_id=None, sensor_type="Vibration"):
     queue = vision_responses
 
     # 🚀 DATABASE-FIRST APPROACH - CHECK DB BEFORE OPENAI CALL
@@ -551,20 +555,34 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None):
             if machine_id is None:
                 machine_id = "09ce4fec-8de8-4c1e-a987-9a0080313456"  # Default fallback
             
-            # Try exact match first
+            # Try exact match first (machine_id + image_path + sensor_type)
+            print(f"🔍 Looking for cached analysis: machine_id={machine_id}, image_path={image_path}, sensor_type={sensor_type}")
             result = conn.execute(
-                text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :image_path"),
-                {"machine_id": machine_id, "image_path": image_path}
+                text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :image_path AND sensor_type = :sensor_type"),
+                {"machine_id": machine_id, "image_path": image_path, "sensor_type": sensor_type}
             )
             row = result.fetchone()
+            print(f"🔍 Exact match result: {'Found' if row else 'Not found'}")
             
-            # If no exact match, try with fallback image path
+            # If no exact match, try with fallback image path and same sensor_type
             if not row and image_path != "/Users/khanhamza/Desktop/image3.png":
+                print(f"🔍 Trying fallback image with same sensor_type: {sensor_type}")
+                result = conn.execute(
+                    text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :fallback_path AND sensor_type = :sensor_type"),
+                    {"machine_id": machine_id, "fallback_path": "/Users/khanhamza/Desktop/image3.png", "sensor_type": sensor_type}
+                )
+                row = result.fetchone()
+                print(f"🔍 Fallback with sensor_type result: {'Found' if row else 'Not found'}")
+            
+            # If still no match, try with any sensor_type for the fallback image
+            if not row and image_path != "/Users/khanhamza/Desktop/image3.png":
+                print(f"🔍 Trying fallback image with any sensor_type")
                 result = conn.execute(
                     text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :fallback_path"),
                     {"machine_id": machine_id, "fallback_path": "/Users/khanhamza/Desktop/image3.png"}
                 )
                 row = result.fetchone()
+                print(f"🔍 Fallback with any sensor_type result: {'Found' if row else 'Not found'}")
             
             if row:
                 cached_analysis = row[0]
@@ -672,7 +690,6 @@ def handle_text_query(query_str, response_format):
         "temperature_sensor", "humidity_sensor", "anomalies", "anomaly_detections", 
         "inference_data", "work_orders", "maintenance_task", "machine_parts", 
         "vibration_inference_data", "critical_health_machine",
-        "maintenance_schedule", "maintenance_parts",
         # Add energy consumption table:
         "machine_energy_consumption",
         # Add troubleshooting and resolution tables:
@@ -843,7 +860,7 @@ def stream_query_response(query_str, response_format):
             return
         
         # Check for table names
-        table_names = ["machine_current_log", "lab", "users", "node", "machine", "lab_user", "current_sensor", "daily_machine_health", "shift_machine_production"]
+        table_names = ["machine_current_log", "lab", "users", "node", "machine", "lab_user", "current_sensor", "shift_machine_production", "maintenance_task"]
         contains_table_name = any(table in query_lower for table in table_names)
         
         if contains_table_name:
@@ -1212,6 +1229,17 @@ def stream_response():
         print(f"❌ Error: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/update-maintenance-status', methods=['POST'])
+def update_maintenance_status():
+    """Update maintenance task status from 'scheduled' to 'Scheduled'"""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("UPDATE maintenance_task SET status = 'Scheduled' WHERE status = 'scheduled'"))
+            conn.commit()
+            return jsonify({"message": f"Updated {result.rowcount} records", "success": True})
+    except Exception as e:
+        return jsonify({"error": str(e), "success": False}), 500
+
 @app.route('/', methods=['GET'])
 def home():
     return "Flask server is running!"
@@ -1529,7 +1557,7 @@ def create_maintenance_task(conn, machine_id, machine_name, category, work_descr
         "scheduled_date": completion_date,
         "duration": int(standard_hours) if standard_hours else 1,
         "priority": priority_str,
-        "status": "scheduled",
+        "status": "Scheduled",
         "assigned_technician": employee_name
     }
 
@@ -1573,7 +1601,7 @@ def get_maintenance_tasks():
                     "machineName": row["machine_name"],
                     "taskType": row["task_type"],
                     "description": row["description"],
-                    "scheduledDate": row["scheduled_date"].isoformat() if row["scheduled_date"] else None,
+                    "scheduledDate": row["scheduled_date"].strftime("%Y-%m-%d") if row["scheduled_date"] else None,
                     "duration": row["duration"],
                     "priority": row["priority"],
                     "status": row["status"],

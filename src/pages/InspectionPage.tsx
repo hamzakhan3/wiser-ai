@@ -126,7 +126,7 @@ const InspectionPage = () => {
       
       await streamQuery(
         message,
-        'inspection-page',
+        'anomaly', // Changed from 'inspection-page' to 'anomaly' to match backend logic
         // onChunk - add each character to the message
         (chunk: string) => {
           accumulatedContent += chunk;
@@ -153,7 +153,11 @@ const InspectionPage = () => {
             )
           );
           setIsQueryLoading(false);
-        }
+        },
+        // machineId - pass the machine ID from URL params
+        searchParams.get('machineId') || undefined,
+        // sensorType - pass the sensor type from URL params
+        searchParams.get('sensorType') || 'Vibration'
       );
       
     } catch (error) {
