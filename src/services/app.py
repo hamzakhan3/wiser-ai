@@ -12,7 +12,7 @@ import openai
 from sqlalchemy import Table, MetaData, insert
 from llama_index.core import SQLDatabase
 from llama_index.llms.openai import OpenAI
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, and_
 import uuid
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import insert
@@ -128,6 +128,11 @@ engine = create_engine(
     echo_pool=True  # This will print connection pool info
 )
 
+# Define machine_vision_analysis table
+metadata = MetaData()
+metadata.reflect(bind=engine)
+machine_vision_analysis = Table('machine_vision_analysis', metadata, autoload_with=engine)
+
 # Create the SQL database object
 sql_database = SQLDatabase(engine)
 sql_database = SQLDatabase(
@@ -145,7 +150,9 @@ sql_database = SQLDatabase(
         # Add troubleshooting and resolution tables:
         "machine_troubleshooting", "maintenance_procedures", 
         "machine_parts_inventory", "machine_issue_history",
-        "machine_performance_benchmarks"
+        "machine_performance_benchmarks",
+        # Add vision analysis table:
+        "machine_vision_analysis"
     ]
 )
 
@@ -210,7 +217,20 @@ def query():
                 image_url = "/Users/khanhamza/Desktop/image3.png"
                 print(f"🔄 Using fallback image: {image_url}")
             
-            return handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
+            if stream:
+                # Return streaming response for anomaly queries
+                return Response(
+                    stream_with_context(stream_anomaly_response(query_str, image_url, machine_id, sensor_type)),
+                    mimetype='text/event-stream',
+                    headers={
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'keep-alive',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Headers': 'Content-Type',
+                    }
+                )
+            else:
+                return handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
         
         if stream:
             # Return streaming response
@@ -291,6 +311,77 @@ def get_cached_response(key):
 def cache_response(key, response):
     redis.setex(key, 3600, response)  # 1-hour expiry
 
+def get_cached_analysis(machine_id, image_path):
+    """Get cached analysis from database"""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                select(machine_vision_analysis).where(
+                    and_(
+                        machine_vision_analysis.c.machine_id == machine_id,
+                        machine_vision_analysis.c.image_path == image_path
+                    )
+                )
+            )
+            row = result.fetchone()
+            if row:
+                return {
+                    'analysis_text': row.analysis_text,
+                    'sensor_type': row.sensor_type,
+                    'created_at': row.created_at.isoformat()
+                }
+    except Exception as e:
+        print(f"Error getting cached analysis: {e}")
+    return None
+
+def save_analysis_to_db(machine_id, image_path, sensor_type, analysis_text):
+    """Save analysis to database"""
+    try:
+        with engine.connect() as conn:
+            # Check if analysis already exists
+            existing = conn.execute(
+                select(machine_vision_analysis).where(
+                    and_(
+                        machine_vision_analysis.c.machine_id == machine_id,
+                        machine_vision_analysis.c.image_path == image_path
+                    )
+                )
+            ).fetchone()
+            
+            if existing:
+                # Update existing analysis
+                conn.execute(
+                    machine_vision_analysis.update().where(
+                        and_(
+                            machine_vision_analysis.c.machine_id == machine_id,
+                            machine_vision_analysis.c.image_path == image_path
+                        )
+                    ).values(
+                        analysis_text=analysis_text,
+                        updated_at=datetime.now()
+                    )
+                )
+                print(f"Updated existing analysis for machine {machine_id}")
+            else:
+                # Insert new analysis
+                conn.execute(
+                    insert(machine_vision_analysis).values(
+                        machine_id=machine_id,
+                        image_path=image_path,
+                        sensor_type=sensor_type,
+                        analysis_text=analysis_text,
+                        created_at=datetime.now(),
+                        updated_at=datetime.now()
+                    )
+                )
+                print(f"Saved new analysis for machine {machine_id}")
+            
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"Error saving analysis to database: {e}")
+        return False
+
 
 
 def handle_anomaly_source(query_str, image_url, machine_id=None, sensor_type="Vibration"):
@@ -301,11 +392,8 @@ def handle_anomaly_source(query_str, image_url, machine_id=None, sensor_type="Vi
     if intent == "yes":
         return process_work_order(query_str, image_url, machine_id, sensor_type)
     
-    if first_prompt == 1:
-        first_prompt = 0
-        return process_vision_first_prompt(query_str, image_url, machine_id, sensor_type)
-    else:
-        return process_vision_followup(query_str)
+    # Always use the new vision analysis logic with database caching
+    return process_vision_first_prompt(query_str, image_url, machine_id, sensor_type)
 
 @log_time
 def get_intent_for_workorder(query_str):
@@ -546,93 +634,114 @@ def get_image_fingerprint(image_path):
 def process_vision_first_prompt(query_str, image_path, machine_id=None, sensor_type="Vibration"):
     queue = vision_responses
 
-    # 🚀 DATABASE-FIRST APPROACH - CHECK DB BEFORE OPENAI CALL
+    # Use provided machine_id or fallback to default
+    if machine_id is None:
+        machine_id = "09ce4fec-8de8-4c1e-a987-9a0080313456"  # Default fallback
+    
+    print(f"🔍 Processing vision analysis for machine_id={machine_id}, image_path={image_path}, sensor_type={sensor_type}")
+    
+    # Step 1: Generate image hash for caching
+    try:
+        image_hash = get_image_fingerprint(image_path)
+        print(f"🔍 Generated image hash: {image_hash}")
+    except Exception as e:
+        print(f"❌ Error generating image hash: {e}")
+        image_hash = None
+    
+    # Step 2: Check for cached analysis in database
+    cached_analysis = get_cached_analysis(machine_id, image_path)
+    if cached_analysis:
+        print(f"✅ Found cached analysis in database")
+        
+        # Create a mock response object that matches OpenAI's structure
+        class MockResponse:
+            def __init__(self, content):
+                self.choices = [MockChoice(content)]
+        
+        class MockChoice:
+            def __init__(self, content):
+                self.message = MockMessage(content)
+        
+        class MockMessage:
+            def __init__(self, content):
+                self.content = content
+        
+        final_response = MockResponse(cached_analysis['analysis_text'])
+        return finalize_vision_response(final_response)
+    
+    # Step 3: No cached analysis found, call OpenAI Vision API
+    print(f"🚀 No cached analysis found, calling OpenAI Vision API...")
     
     try:
-        # Try to get analysis from database first
-        with engine.connect() as conn:
-            # Use provided machine_id or fallback to default
-            if machine_id is None:
-                machine_id = "09ce4fec-8de8-4c1e-a987-9a0080313456"  # Default fallback
-            
-            # Try exact match first (machine_id + image_path + sensor_type)
-            print(f"🔍 Looking for cached analysis: machine_id={machine_id}, image_path={image_path}, sensor_type={sensor_type}")
-            result = conn.execute(
-                text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :image_path AND sensor_type = :sensor_type"),
-                {"machine_id": machine_id, "image_path": image_path, "sensor_type": sensor_type}
-            )
-            row = result.fetchone()
-            print(f"🔍 Exact match result: {'Found' if row else 'Not found'}")
-            
-            # If no exact match, try with fallback image path and same sensor_type
-            if not row and image_path != "/Users/khanhamza/Desktop/image3.png":
-                print(f"🔍 Trying fallback image with same sensor_type: {sensor_type}")
-                result = conn.execute(
-                    text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :fallback_path AND sensor_type = :sensor_type"),
-                    {"machine_id": machine_id, "fallback_path": "/Users/khanhamza/Desktop/image3.png", "sensor_type": sensor_type}
-                )
-                row = result.fetchone()
-                print(f"🔍 Fallback with sensor_type result: {'Found' if row else 'Not found'}")
-            
-            # If still no match, try with any sensor_type for the fallback image
-            if not row and image_path != "/Users/khanhamza/Desktop/image3.png":
-                print(f"🔍 Trying fallback image with any sensor_type")
-                result = conn.execute(
-                    text("SELECT analysis_text FROM machine_vision_analysis WHERE machine_id = :machine_id AND image_path = :fallback_path"),
-                    {"machine_id": machine_id, "fallback_path": "/Users/khanhamza/Desktop/image3.png"}
-                )
-                row = result.fetchone()
-                print(f"🔍 Fallback with any sensor_type result: {'Found' if row else 'Not found'}")
-            
-            if row:
-                cached_analysis = row[0]
-                
-                # Create a mock response object that matches OpenAI's structure
-                class MockResponse:
-                    def __init__(self, content):
-                        self.choices = [MockChoice(content)]
-                
-                class MockChoice:
-                    def __init__(self, content):
-                        self.message = MockMessage(content)
-                
-                class MockMessage:
-                    def __init__(self, content):
-                        self.content = content
-                
-                final_response = MockResponse(cached_analysis)
-                return finalize_vision_response(final_response)
-                
+        # Encode image to base64
+        base64_image = encode_image_to_base64(image_path)
+        
+        # Call OpenAI Vision API
+        response = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+                        {
+                "role": "user",
+                "content": [
+                        {
+                            "type": "text",
+                            "text": f"Analyze this machine image and provide a detailed diagnosis. This is a {sensor_type} sensor anomaly from machine {machine_id}. Provide 5 likely causes with explanations."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000
+        )
+        
+        analysis_text = response.choices[0].message.content
+        print(f"✅ OpenAI Vision API response received")
+        
+        # Step 4: Save analysis to database
+        if analysis_text:
+            success = save_analysis_to_db(machine_id, image_path, sensor_type, analysis_text)
+            if success:
+                print(f"✅ Analysis saved to database")
+            else:
+                print(f"❌ Failed to save analysis to database")
+        
+        return finalize_vision_response(response)
+        
     except Exception as e:
-        pass  # Fall back to hardcoded response
-    
-    # Fallback to hardcoded response
-    hardcoded_response = """Based on the vibration sensor data from the CNC machine and the detected anomalies, here are the top five likely causes for the anomalies:
+        print(f"❌ Error calling OpenAI Vision API: {e}")
+        
+        # Fallback to hardcoded response
+        hardcoded_response = """Based on the vibration sensor data from the CNC machine and the detected anomalies, here are the top five likely causes for the anomalies:
 
-- **Imbalance**: Uneven weight distribution in rotating components can cause increased vibration levels, indicating a potential imbalance in the machine.
+   - **Imbalance**: Uneven weight distribution in rotating components can cause increased vibration levels, indicating a potential imbalance in the machine.
 
-- **Misalignment**: Components such as couplings, shafts, or pulleys might be misaligned, leading to periodic increases in vibration.
+   - **Misalignment**: Components such as couplings, shafts, or pulleys might be misaligned, leading to periodic increases in vibration.
 
-- **Bearing Wear**: Worn or damaged bearings can lead to irregular vibration patterns, which may correlate with the observed anomalies.
+   - **Bearing Wear**: Worn or damaged bearings can lead to irregular vibration patterns, which may correlate with the observed anomalies.
 
-- **Resonance**: The machine could be amplifying vibrations at certain frequencies, possibly corresponding with the operational times highlighted in the anomalies.
+   - **Resonance**: The machine could be amplifying vibrations at certain frequencies, possibly corresponding with the operational times highlighted in the anomalies.
 
-- **Component Looseness**: Looseness in machine parts, such as bolts or mounts, can cause intermittent spikes in vibration, potentially matching the detected anomalies."""
-    
-    # Create a mock response object that matches OpenAI's structure
-    class MockResponse:
-        def __init__(self, content):
-            self.choices = [MockChoice(content)]
-    
-    class MockChoice:
-        def __init__(self, content):
-            self.message = MockMessage(content)
-    
-    class MockMessage:
-        def __init__(self, content):
-            self.content = content
-    
-    final_response = MockResponse(hardcoded_response)
+   - **Component Looseness**: Looseness in machine parts, such as bolts or mounts, can cause intermittent spikes in vibration, potentially matching the detected anomalies."""
+        
+        # Create a mock response object that matches OpenAI's structure
+        class MockResponse:
+            def __init__(self, content):
+                self.choices = [MockChoice(content)]
+        
+        class MockChoice:
+            def __init__(self, content):
+                self.message = MockMessage(content)
+        
+        class MockMessage:
+            def __init__(self, content):
+                self.content = content
+        
+        final_response = MockResponse(hardcoded_response)
     return finalize_vision_response(final_response)
 
 @log_time
@@ -915,6 +1024,39 @@ def stream_query_response(query_str, response_format):
             time.sleep(0.02)
         yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
+def stream_anomaly_response(query_str, image_url, machine_id=None, sensor_type="Vibration"):
+    """Stream response for anomaly queries with vision analysis"""
+    try:
+        print(f"🚀 Starting anomaly stream for query: {query_str}")
+        print(f"🔍 Machine ID: {machine_id}, Sensor Type: {sensor_type}, Image URL: {image_url}")
+        
+        # Send initial status
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing machine anomaly...'})}\n\n"
+        
+        # Get the response from handle_anomaly_source
+        response = handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
+        
+        if isinstance(response, tuple):
+            response_data = response[0].get_json()
+        else:
+            response_data = response.get_json()
+        
+        response_text = response_data.get('response', '')
+        
+        # Send status update
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Generating analysis...'})}\n\n"
+        
+        # Stream the response character by character
+        for char in response_text:
+            yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+            time.sleep(0.01)  # Small delay for streaming effect
+        
+        # Send completion signal
+        yield f"data: {json.dumps({'type': 'complete', 'content': 'Analysis completed'})}\n\n"
+        
+    except Exception as e:
+        print(f"❌ Error in stream_anomaly_response: {e}")
+        yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
     
 @app.route('/stream', methods=['POST'])
@@ -928,7 +1070,7 @@ def stream_response():
         
         # Use the existing AI model to get a real response
         print("🤖 Getting AI response...")
-                
+        
         # Check if query is asking for machine health, production, or parts distribution
         health_keywords = ['health status', 'machine health', 'health overview', 'status of machines', 'health distribution']
         production_keywords = ['production', 'units produced', 'output', 'manufacturing']
@@ -1224,7 +1366,7 @@ def stream_response():
         print(f"✅ AI Response received: {len(response_data['content'])} characters")
         
         return jsonify(response_data)
-                
+        
     except Exception as e:
         print(f"❌ Error: {e}")
         return jsonify({"error": str(e)}), 500
