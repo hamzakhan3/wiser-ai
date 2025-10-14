@@ -311,19 +311,38 @@ def get_cached_response(key):
 def cache_response(key, response):
     redis.setex(key, 3600, response)  # 1-hour expiry
 
-def get_cached_analysis(machine_id, image_path):
-    """Get cached analysis from database"""
+def get_cached_analysis(machine_id, image_path=None):
+    """Get cached analysis from database - if image_path is provided, try exact match first, then fallback to any analysis for machine"""
     try:
+        print(f"🔍 get_cached_analysis: Looking for machine_id={machine_id}, image_path={image_path}")
         with engine.connect() as conn:
-            result = conn.execute(
-                select(machine_vision_analysis).where(
-                    and_(
-                        machine_vision_analysis.c.machine_id == machine_id,
-                        machine_vision_analysis.c.image_path == image_path
+            # First try exact match if image_path is provided
+            if image_path:
+                result = conn.execute(
+                    select(machine_vision_analysis).where(
+                        and_(
+                            machine_vision_analysis.c.machine_id == machine_id,
+                            machine_vision_analysis.c.image_path == image_path
+                        )
                     )
                 )
+                row = result.fetchone()
+                if row:
+                    print(f"🔍 get_cached_analysis: Found exact match")
+                    return {
+                        'analysis_text': row.analysis_text,
+                        'sensor_type': row.sensor_type,
+                        'created_at': row.created_at.isoformat()
+                    }
+            
+            # If no exact match, get the most recent analysis for this machine
+            result = conn.execute(
+                select(machine_vision_analysis).where(
+                    machine_vision_analysis.c.machine_id == machine_id
+                ).order_by(machine_vision_analysis.c.created_at.desc())
             )
             row = result.fetchone()
+            print(f"🔍 get_cached_analysis: Found most recent analysis = {row is not None}")
             if row:
                 return {
                     'analysis_text': row.analysis_text,
@@ -398,19 +417,23 @@ def handle_anomaly_source(query_str, image_url, machine_id=None, sensor_type="Vi
     print("🔍 Getting saved analysis and combining with user prompt")
     
     # Get the saved analysis from database
+    print(f"🔍 Debug: Looking for analysis with machine_id={machine_id}, image_url={image_url}")
     saved_analysis = get_cached_analysis(machine_id, image_url)
+    print(f"🔍 Debug: saved_analysis = {saved_analysis}")
     
     if saved_analysis:
         print("✅ Found saved analysis, combining with user prompt")
         
         # Combine saved analysis with user prompt
         combined_prompt = f"""
-Previous machine analysis:
+You are analyzing a machine anomaly. Below is the AI vision analysis that was previously performed on an image showing machine anomalies and sensor data patterns:
+
+**Previous Image Analysis Results:**
 {saved_analysis['analysis_text']}
 
-User's new question: {query_str}
+**User's Question:** {query_str}
 
-Please provide a response based on the previous analysis and the user's question.
+Please provide a detailed response based on the previous image analysis and the user's specific question. Focus on how the image analysis findings relate to what the user is asking about.
 """
         
         # Call OpenAI with the combined prompt (no image needed since we have the analysis)
