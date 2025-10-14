@@ -205,20 +205,20 @@ def query():
             print("❌ ERROR: No query string provided")
             return jsonify({"error": "Query string is required"}), 400
         
-        # Intelligent routing based on query content, not just source
-        machine_id = data.get("machine_id")
-        sensor_type = data.get("sensor_type", "Vibration")
-        
-        # Check for work order intent first (regardless of source)
-        intent = get_intent_for_workorder(query_str)
-        if intent == "yes" and source == "anomaly":
-            # Only process work orders if we're on anomaly page and have machine context
+        if source == "anomaly":
+            machine_id = data.get("machine_id")
+            sensor_type = data.get("sensor_type", "Vibration")  # Default to Vibration
             image_url = get_machine_image_url(machine_id)
+            
+            print(f"🔍 Anomaly query - Machine ID: {machine_id}, Sensor Type: {sensor_type}, Image URL: {image_url}")
+            
+            # Fallback to default image if no image found
             if image_url is None:
                 image_url = "/Users/khanhamza/Desktop/image3.png"
                 print(f"🔄 Using fallback image: {image_url}")
             
             if stream:
+                # Return streaming response for anomaly queries
                 return Response(
                     stream_with_context(stream_anomaly_response(query_str, image_url, machine_id, sensor_type)),
                     mimetype='text/event-stream',
@@ -232,12 +232,8 @@ def query():
             else:
                 return handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
         
-        # For all other queries (greetings, database queries, etc.), use main chat logic
-        # This ensures consistent behavior regardless of source
-        print("📊 Using main chat logic for query")
-        
         if stream:
-            # Return streaming response using main chat logic
+            # Return streaming response
             return Response(
                 stream_with_context(stream_query_response(query_str, response_format)),
                 mimetype='text/event-stream',
@@ -249,7 +245,7 @@ def query():
                 }
             )
         else:
-            # Return regular JSON response using main chat logic
+            # Return regular JSON response (current behavior)
             return handle_text_query(query_str, response_format)
             
     except Exception as e:
@@ -398,31 +394,57 @@ def handle_anomaly_source(query_str, image_url, machine_id=None, sensor_type="Vi
     if intent == "yes":
         return process_work_order(query_str, image_url, machine_id, sensor_type)
     
-    # For non-work-order queries, check if it's a simple greeting or text query
-    # Use the existing handle_text_query logic for consistency
-    greeting_keywords = ['hey', 'hi', 'hello', 'good morning', 'good afternoon', 'good evening']
-    db_related_words = ['machine', 'machines', 'production', 'health', 'status', 'data', 'list', 'show', 'tell', 'about', 'query', 'database', 'table']
+    # For all other queries, get saved analysis and combine with user prompt
+    print("🔍 Getting saved analysis and combining with user prompt")
     
-    query_lower = query_str.lower().strip()
-    contains_greeting = any(greeting in query_lower for greeting in greeting_keywords)
-    contains_db_words = any(word in query_lower for word in db_related_words)
-    is_short_query = len(query_lower) < 20
-    starts_with_greeting = any(query_lower.startswith(greeting) for greeting in greeting_keywords)
+    # Get the saved analysis from database
+    saved_analysis = get_cached_analysis(machine_id, image_url)
     
-    is_simple_greeting = contains_greeting and not contains_db_words and (is_short_query or starts_with_greeting)
+    if saved_analysis:
+        print("✅ Found saved analysis, combining with user prompt")
+        
+        # Combine saved analysis with user prompt
+        combined_prompt = f"""
+Previous machine analysis:
+{saved_analysis['analysis_text']}
+
+User's new question: {query_str}
+
+Please provide a response based on the previous analysis and the user's question.
+"""
+        
+        # Call OpenAI with the combined prompt (no image needed since we have the analysis)
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": combined_prompt
+                    }
+                ],
+                max_tokens=1000
+            )
+            
+            analysis_text = response.choices[0].message.content
+            print(f"✅ OpenAI response received for combined prompt")
+            
+            return jsonify({
+                "response": analysis_text,
+                "format": "vision"
+            })
+            
+        except Exception as e:
+            print(f"❌ Error calling OpenAI: {e}")
+            return jsonify({
+                "response": f"Error processing your request: {str(e)}",
+                "format": "text"
+            })
     
-    if is_simple_greeting:
-        # Use the same greeting response as the main chat page for consistency
-        print("👋 Simple greeting detected on anomaly page - using main chat logic")
-        return jsonify({
-            "response": "Hello! I'm Wise Guy, your AI assistant for machine monitoring and data analysis. How can I help you today?",
-            "format": "text"
-        })
-    
-    # For other text queries, use the existing handle_text_query function
-    # This ensures consistency with the main chat page behavior
-    print("📊 Using main chat logic for text query on anomaly page")
-    return handle_text_query(query_str, "text")
+    else:
+        print("❌ No saved analysis found, performing new vision analysis")
+        # Fallback to original vision analysis if no saved analysis exists
+        return process_vision_first_prompt(query_str, image_url, machine_id, sensor_type)
 
 @log_time
 def get_intent_for_workorder(query_str):
@@ -1059,32 +1081,29 @@ def stream_anomaly_response(query_str, image_url, machine_id=None, sensor_type="
         print(f"🚀 Starting anomaly stream for query: {query_str}")
         print(f"🔍 Machine ID: {machine_id}, Sensor Type: {sensor_type}, Image URL: {image_url}")
         
-        # Check for simple greetings first - use same logic as main chat
-        greeting_keywords = ['hey', 'hi', 'hello', 'good morning', 'good afternoon', 'good evening']
-        db_related_words = ['machine', 'machines', 'production', 'health', 'status', 'data', 'list', 'show', 'tell', 'about', 'query', 'database', 'table']
+        # Send initial status
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing machine anomaly...'})}\n\n"
         
-        query_lower = query_str.lower().strip()
-        contains_greeting = any(greeting in query_lower for greeting in greeting_keywords)
-        contains_db_words = any(word in query_lower for word in db_related_words)
-        is_short_query = len(query_lower) < 20
-        starts_with_greeting = any(query_lower.startswith(greeting) for greeting in greeting_keywords)
+        # Get the response from handle_anomaly_source
+        response = handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
         
-        is_simple_greeting = contains_greeting and not contains_db_words and (is_short_query or starts_with_greeting)
+        if isinstance(response, tuple):
+            response_data = response[0].get_json()
+        else:
+            response_data = response.get_json()
         
-        if is_simple_greeting:
-            # Stream the same greeting response as main chat for consistency
-            greeting = "Hello! I'm Wise Guy, your AI assistant for machine monitoring and data analysis. How can I help you today?"
-            for char in greeting:
-                yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
-                time.sleep(0.02)  # Small delay for typing effect
-            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
-            return
+        response_text = response_data.get('response', '')
         
-        # For other queries, use the existing stream_query_response logic
-        # This ensures consistency with the main chat page behavior
-        print("📊 Using main chat streaming logic for anomaly page")
-        for chunk in stream_query_response(query_str, "text"):
-            yield chunk
+        # Send status update
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Generating analysis...'})}\n\n"
+        
+        # Stream the response character by character
+        for char in response_text:
+            yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+            time.sleep(0.01)  # Small delay for streaming effect
+        
+        # Send completion signal
+        yield f"data: {json.dumps({'type': 'complete', 'content': 'Analysis completed'})}\n\n"
         
     except Exception as e:
         print(f"❌ Error in stream_anomaly_response: {e}")
