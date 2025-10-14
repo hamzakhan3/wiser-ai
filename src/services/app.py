@@ -205,20 +205,20 @@ def query():
             print("❌ ERROR: No query string provided")
             return jsonify({"error": "Query string is required"}), 400
         
-        if source == "anomaly":
-            machine_id = data.get("machine_id")
-            sensor_type = data.get("sensor_type", "Vibration")  # Default to Vibration
+        # Intelligent routing based on query content, not just source
+        machine_id = data.get("machine_id")
+        sensor_type = data.get("sensor_type", "Vibration")
+        
+        # Check for work order intent first (regardless of source)
+        intent = get_intent_for_workorder(query_str)
+        if intent == "yes" and source == "anomaly":
+            # Only process work orders if we're on anomaly page and have machine context
             image_url = get_machine_image_url(machine_id)
-            
-            print(f"🔍 Anomaly query - Machine ID: {machine_id}, Sensor Type: {sensor_type}, Image URL: {image_url}")
-            
-            # Fallback to default image if no image found
             if image_url is None:
                 image_url = "/Users/khanhamza/Desktop/image3.png"
                 print(f"🔄 Using fallback image: {image_url}")
             
             if stream:
-                # Return streaming response for anomaly queries
                 return Response(
                     stream_with_context(stream_anomaly_response(query_str, image_url, machine_id, sensor_type)),
                     mimetype='text/event-stream',
@@ -232,8 +232,12 @@ def query():
             else:
                 return handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
         
+        # For all other queries (greetings, database queries, etc.), use main chat logic
+        # This ensures consistent behavior regardless of source
+        print("📊 Using main chat logic for query")
+        
         if stream:
-            # Return streaming response
+            # Return streaming response using main chat logic
             return Response(
                 stream_with_context(stream_query_response(query_str, response_format)),
                 mimetype='text/event-stream',
@@ -245,7 +249,7 @@ def query():
                 }
             )
         else:
-            # Return regular JSON response (current behavior)
+            # Return regular JSON response using main chat logic
             return handle_text_query(query_str, response_format)
             
     except Exception as e:
