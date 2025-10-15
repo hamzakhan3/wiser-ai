@@ -1,253 +1,283 @@
-# Wiser AI - Machine Monitoring System
+# Wiser AI - Machine Monitoring & Anomaly Detection System
 
-A comprehensive AI-powered machine monitoring and data analysis platform built with React, Python Flask, and PostgreSQL. Features real-time streaming chat interface, machine health monitoring, production analytics, and intelligent data insights.
+A comprehensive AI-powered machine monitoring system that provides real-time anomaly detection, vision analysis, and intelligent chat assistance for industrial equipment.
 
 ## 🚀 Features
 
-### Core Functionality
-- **AI-Powered Chat Interface** - Real-time streaming responses with character-by-character typing effect
-- **Machine Health Monitoring** - Track machine status, health metrics, and critical alerts
-- **Production Analytics** - Monitor production data, downtime, and efficiency metrics
-- **Intelligent Data Insights** - Natural language queries with GPT-4o powered responses
-- **Work Order Management** - Create and manage maintenance work orders
-- **Inspection Tools** - Comprehensive machine inspection capabilities
+### 🔍 **Real-Time Anomaly Detection**
+- **Machine Health Monitoring**: Continuous monitoring of vibration, temperature, and humidity sensors
+- **Anomaly Visualization**: Interactive charts showing sensor data patterns and anomaly points
+- **Critical Health Alerts**: Real-time notifications for machines requiring immediate attention
+- **Historical Analysis**: Trend analysis and pattern recognition over time
 
-### Technical Features
-- **Server-Sent Events (SSE)** - Real-time streaming for instant responses
-- **Natural Language Processing** - Query your data using plain English
-- **PostgreSQL Integration** - Robust data storage and retrieval
-- **LlamaIndex Integration** - Advanced SQL query generation from natural language
-- **GPT-4o Refinement** - Enhanced response formatting and clarity
-- **Responsive Design** - Modern UI with Tailwind CSS and shadcn/ui components
+### 🤖 **AI-Powered Chat Assistant**
+- **Dual Chat Interfaces**: 
+  - **Main Chat Page**: General machine monitoring and database queries
+  - **Anomaly Inspection Page**: Specialized analysis with image context
+- **Real-Time Streaming**: Character-by-character streaming responses for immediate feedback
+- **Intelligent Routing**: Context-aware responses based on query source and content
+- **Work Order Generation**: Automatic creation of maintenance work orders from chat interactions
 
-## 🛠️ Tech Stack
+### 🖼️ **Machine Vision Analysis**
+- **Image-Based Anomaly Detection**: AI analysis of machine images and sensor data visualizations
+- **Cached Analysis System**: Efficient storage and retrieval of previous image analyses
+- **Contextual Responses**: Follow-up questions use saved analysis for enhanced accuracy
+- **Multi-Modal AI**: Combines visual and textual data for comprehensive insights
 
-### Frontend
-- **React 18** - Modern React with hooks and functional components
-- **TypeScript** - Type-safe development
-- **Vite** - Fast build tool and development server
-- **Tailwind CSS** - Utility-first CSS framework
-- **shadcn/ui** - Beautiful, accessible UI components
-- **Recharts** - Data visualization and charting
-- **React Markdown** - Markdown rendering for AI responses
+### 📊 **Data Management**
+- **PostgreSQL Database**: Robust data storage with comprehensive schema
+- **Real-Time Data Processing**: Live sensor data ingestion and processing
+- **Caching System**: Redis-based caching for improved performance
+- **Data Visualization**: Interactive charts and graphs for data analysis
 
-### Backend
-- **Python Flask** - Lightweight web framework
-- **PostgreSQL** - Relational database for data storage
-- **SQLAlchemy** - Python SQL toolkit and ORM
-- **LlamaIndex** - Natural language to SQL query engine
-- **OpenAI GPT-4o** - AI response refinement and formatting
-- **Server-Sent Events** - Real-time streaming communication
+### 🔧 **Maintenance Management**
+- **Work Order System**: Automated generation and tracking of maintenance tasks
+- **Maintenance Scheduling**: Planned maintenance with parts inventory management
+- **Technician Assignment**: Resource allocation and task distribution
+- **Parts Inventory**: Real-time tracking of machine parts and maintenance supplies
 
-## 📋 Prerequisites
+## 🏗️ **Architecture**
 
-- **Node.js** (v18 or higher) - [Install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-- **Python 3.11+** - [Download from python.org](https://www.python.org/downloads/)
-- **PostgreSQL** - [Download from postgresql.org](https://www.postgresql.org/download/)
-- **Git** - [Download from git-scm.com](https://git-scm.com/downloads)
+### **Backend (Flask)**
+- **API Endpoints**: RESTful API for all system operations
+- **Streaming Support**: Server-Sent Events (SSE) for real-time communication
+- **Database Integration**: SQLAlchemy ORM with PostgreSQL
+- **AI Integration**: OpenAI GPT-4o for chat and vision analysis
+- **Caching Layer**: Redis for performance optimization
 
-## 🚀 How to Start the Project
+### **Frontend (React + TypeScript)**
+- **Modern UI**: Built with React, TypeScript, and Tailwind CSS
+- **Component Library**: shadcn/ui components for consistent design
+- **Real-Time Updates**: WebSocket-like streaming for live data
+- **Responsive Design**: Mobile-friendly interface
+- **State Management**: React hooks for efficient state handling
 
-### Prerequisites Check
-Make sure you have the following installed:
-- **Node.js** (v18+) - Check with `node --version`
-- **Python 3.11+** - Check with `python --version`
-- **PostgreSQL** - Check with `psql --version`
-- **Git** - Check with `git --version`
+### **Database Schema**
+- **Machine Data**: Equipment information, sensor readings, and health status
+- **Anomaly Detection**: Anomaly records and detection algorithms
+- **Vision Analysis**: Cached AI analysis results and image metadata
+- **Work Orders**: Maintenance tasks, assignments, and completion tracking
+- **User Management**: Authentication and role-based access control
 
-### Step 1: Clone and Navigate
-```bash
-git clone https://github.com/hamzakhan3/wiser-ai.git
-cd wiser-ai
-```
+## 🚀 **Getting Started**
 
-### Step 2: Backend Setup
+### **Prerequisites**
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL 13+
+- Redis (optional, for caching)
 
-#### Create and Activate Python Virtual Environment
-```bash
-# Create virtual environment
-python -m venv venv
+### **Installation**
 
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-venv\Scripts\activate
-
-# You should see (venv) in your terminal prompt
-```
-
-#### Install Python Dependencies
-```bash
-# Install required packages
-pip install flask sqlalchemy psycopg2-binary llama-index openai python-dotenv
-```
-
-#### Database Setup
-1. **Start PostgreSQL service** (if not running)
-2. **Create database**:
+1. **Clone the repository**
    ```bash
-   # Connect to PostgreSQL
-   psql -U postgres
-   
-   # Create database
-   CREATE DATABASE wiser_ai;
-   
-   # Exit psql
-   \q
+   git clone https://github.com/hamzakhan3/wiser-ai.git
+   cd wiser-ai
    ```
 
-#### Start Backend Server
+2. **Backend Setup**
+   ```bash
+   # Create virtual environment
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   
+   # Install dependencies
+   pip install -r requirements.txt
+   
+   # Set up environment variables
+   cp .env.example .env
+   # Edit .env with your database and API credentials
+   ```
+
+3. **Frontend Setup**
+   ```bash
+   # Install dependencies
+   npm install
+   
+   # Start development server
+   npm run dev
+   ```
+
+4. **Database Setup**
+   ```bash
+   # Create PostgreSQL database
+   createdb wiser_ai
+   
+   # Run migrations (if available)
+   python src/services/migrate.py
+   ```
+
+5. **Start Services**
+   ```bash
+   # Terminal 1: Start backend
+   cd /path/to/wiser-ai
+   source venv/bin/activate
+   python src/services/app.py
+   
+   # Terminal 2: Start frontend
+   npm run dev
+   ```
+
+## 📱 **Usage**
+
+### **Machine Health Dashboard**
+1. Navigate to `/machine-health` to view all machines
+2. Click on any machine to see detailed health metrics
+3. Use filters to focus on specific sensor types or time ranges
+4. Click "Inspect Anomaly" for detailed analysis
+
+### **Anomaly Inspection**
+1. From the machine health page, click "Inspect Anomaly" on any machine
+2. View interactive charts showing sensor data and anomaly points
+3. Use the chat interface to ask questions about the anomalies
+4. Generate work orders directly from the chat interface
+
+### **AI Chat Assistant**
+1. **Main Chat**: Navigate to `/chat` for general queries about machines, production, or data
+2. **Anomaly Chat**: Use the chat interface on the inspection page for context-aware analysis
+3. **Streaming Responses**: Watch responses appear in real-time as the AI generates them
+4. **Work Orders**: Ask to "generate a work order" to create maintenance tasks
+
+### **Vision Analysis**
+1. Upload machine images or use existing sensor data visualizations
+2. AI analyzes the images for anomalies and patterns
+3. Ask follow-up questions that use the saved analysis for context
+4. Get detailed insights about potential issues and solutions
+
+## 🔧 **API Endpoints**
+
+### **Query Endpoints**
+- `POST /query` - Main query endpoint with streaming support
+- `POST /stream` - Legacy streaming endpoint
+- `GET /inspection` - Get inspection data with filters
+
+### **Machine Data**
+- `GET /machines` - List all machines
+- `GET /machine/{id}` - Get specific machine details
+- `GET /machine-health` - Get health status for all machines
+
+### **Anomaly Detection**
+- `GET /anomalies` - List detected anomalies
+- `POST /anomaly/analyze` - Analyze specific anomaly
+- `GET /anomaly/{id}` - Get anomaly details
+
+### **Work Orders**
+- `GET /work-orders` - List all work orders
+- `POST /work-order` - Create new work order
+- `PUT /work-order/{id}` - Update work order status
+
+## 🎯 **Key Features in Detail**
+
+### **Real-Time Streaming**
+- **Character-by-character streaming** for immediate user feedback
+- **Status updates** during processing (e.g., "Analyzing machine anomaly...")
+- **Error handling** with graceful fallbacks
+- **Consistent experience** across all chat interfaces
+
+### **Intelligent Context Management**
+- **Source-aware routing** (main chat vs. anomaly page)
+- **Cached analysis integration** for follow-up questions
+- **Enhanced prompts** with image analysis context
+- **Fallback mechanisms** for missing data
+
+### **Advanced Caching**
+- **Database caching** for vision analysis results
+- **Redis caching** for frequently accessed data
+- **Smart cache invalidation** based on data freshness
+- **Fallback strategies** when cache is unavailable
+
+### **Work Order Intelligence**
+- **Intent detection** for work order requests
+- **Automatic field population** from chat context
+- **Integration with parts inventory**
+- **Technician assignment logic**
+
+## 🔒 **Security & Performance**
+
+### **Security Features**
+- **Input validation** and sanitization
+- **SQL injection prevention** through ORM
+- **CORS configuration** for cross-origin requests
+- **Environment variable management** for sensitive data
+
+### **Performance Optimizations**
+- **Database indexing** for fast queries
+- **Connection pooling** for database efficiency
+- **Caching strategies** for reduced API calls
+- **Streaming responses** for better user experience
+
+## 🧪 **Testing**
+
+### **Backend Testing**
 ```bash
-# Make sure you're in the project root and venv is activated
-python src/services/app.py
+# Run backend tests
+python -m pytest tests/
 ```
 
-**✅ Backend is running at:** `http://localhost:5001`
-
-### Step 3: Frontend Setup
-
-#### Open a New Terminal Window
+### **Frontend Testing**
 ```bash
-# Navigate to project directory
-cd wiser-ai
-
-# Install Node.js dependencies
-npm install
+# Run frontend tests
+npm test
 ```
 
-#### Start Frontend Development Server
+### **Integration Testing**
 ```bash
-npm run dev
+# Test API endpoints
+curl -X POST http://localhost:5001/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Show me machine health status", "source": "chat"}'
 ```
 
-**✅ Frontend is running at:** `http://localhost:8080`
+## 📈 **Monitoring & Analytics**
 
-### Step 4: Verify Everything is Working
+### **System Metrics**
+- **Response times** for API endpoints
+- **Database query performance**
+- **Cache hit rates**
+- **Error rates and types**
 
-1. **Open your browser** and go to `http://localhost:8080`
-2. **You should see** the Wiser AI interface
-3. **Test the chat** by typing "hello" or "list of machines"
-4. **Check backend logs** in the terminal running `python src/services/app.py`
+### **User Analytics**
+- **Chat interaction patterns**
+- **Most common queries**
+- **Feature usage statistics**
+- **User engagement metrics**
 
-### 🎯 Quick Start Commands Summary
+## 🚀 **Deployment**
 
+### **Production Setup**
+1. **Environment Configuration**
+   ```bash
+   # Set production environment variables
+   export FLASK_ENV=production
+   export DATABASE_URL=postgresql://user:pass@host:port/db
+   export OPENAI_API_KEY=your_api_key
+   ```
+
+2. **Database Migration**
+   ```bash
+   # Run production migrations
+   python src/services/migrate.py --env=production
+   ```
+
+3. **Build Frontend**
+   ```bash
+   # Build for production
+   npm run build
+   ```
+
+4. **Deploy Backend**
+   ```bash
+   # Use production WSGI server
+   gunicorn -w 4 -b 0.0.0.0:5001 src.services.app:app
+   ```
+
+### **Docker Deployment**
 ```bash
-# Terminal 1 - Backend
-cd wiser-ai
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install flask sqlalchemy psycopg2-binary llama-index openai python-dotenv
-python src/services/app.py
-
-# Terminal 2 - Frontend  
-cd wiser-ai
-npm install
-npm run dev
+# Build and run with Docker
+docker-compose up -d
 ```
 
-### 🔧 Troubleshooting
-
-**Backend Issues:**
-- Make sure PostgreSQL is running
-- Check if port 5001 is available
-- Verify database connection in `src/services/app.py`
-
-**Frontend Issues:**
-- Make sure Node.js is installed
-- Try `npm install` again if dependencies fail
-- Check if port 8080 is available
-
-**Database Issues:**
-- Ensure PostgreSQL service is running
-- Verify database `wiser_ai` exists
-- Check database credentials in the backend code
-
-## 🎯 Usage
-
-### Chat Interface
-- Navigate to the main chat page
-- Ask questions about your machines, production data, or health status
-- Experience real-time streaming responses with typing effect
-- Get formatted markdown responses with proper headings and lists
-
-### Example Queries
-- "Show me all machines with critical health status"
-- "Which machines had the most downtime this week?"
-- "List the production output for each machine"
-- "What's the health status of CNC Machine A?"
-
-### Machine Monitoring
-- View real-time machine health metrics
-- Monitor production efficiency and downtime
-- Track maintenance schedules and work orders
-- Generate inspection reports
-
-## 🔧 Development
-
-### Project Structure
-```
-wiser-ai/
-├── src/
-│   ├── components/          # Reusable UI components
-│   │   ├── ui/             # shadcn/ui components
-│   │   ├── Chart.tsx       # Data visualization
-│   │   ├── Sidebar.tsx     # Navigation sidebar
-│   │   └── ...
-│   ├── pages/              # Main application pages
-│   │   ├── ChatPage.tsx    # Main chat interface
-│   │   ├── InspectionPage.tsx # Machine inspection
-│   │   └── ...
-│   ├── services/           # API and backend services
-│   │   ├── app.py          # Flask backend server
-│   │   ├── apiService.ts   # Frontend API client
-│   │   └── ...
-│   └── lib/                # Utility functions
-├── public/                 # Static assets
-└── README.md
-```
-
-### Available Scripts
-```bash
-# Development
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run preview      # Preview production build
-npm run lint         # Run ESLint
-
-# Backend
-python src/services/app.py  # Start Flask server
-```
-
-### Environment Variables
-Create a `.env` file in the root directory:
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-DATABASE_URL=postgresql://username:password@localhost:5432/wiser_ai
-```
-
-## 🚀 Deployment
-
-### Frontend Deployment
-The frontend can be deployed to any static hosting service:
-- **Vercel**: Connect your GitHub repository
-- **Netlify**: Drag and drop the `dist` folder after `npm run build`
-- **GitHub Pages**: Use GitHub Actions for automated deployment
-
-### Backend Deployment
-The Flask backend can be deployed to:
-- **Heroku**: Use the included `Procfile`
-- **Railway**: Connect your GitHub repository
-- **DigitalOcean App Platform**: Deploy with automatic scaling
-- **AWS/GCP/Azure**: Use container services
-
-### Docker Deployment
-```bash
-# Build and run with Docker Compose
-docker-compose up --build
-```
-
-## 🤝 Contributing
+## 🤝 **Contributing**
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -255,28 +285,34 @@ docker-compose up --build
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📝 License
+## 📝 **License**
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
+## 🆘 **Support**
 
-If you encounter any issues or have questions:
+For support and questions:
+- Create an issue in the GitHub repository
+- Check the documentation in the `/docs` folder
+- Review the API documentation at `/api-docs`
 
-1. Check the [Issues](https://github.com/hamzakhan3/wiser-ai/issues) page
-2. Create a new issue with detailed information
-3. Contact the development team
+## 🔄 **Recent Updates**
 
-## 🔮 Roadmap
+### **Feature-Sage-006** (Latest)
+- ✅ **Real-time streaming** for anomaly page
+- ✅ **Enhanced context** in AI prompts
+- ✅ **Improved caching** with fallback logic
+- ✅ **Consistent streaming** experience across all pages
+- ✅ **Better error handling** and debug logging
 
-- [ ] Advanced analytics dashboard
-- [ ] Machine learning predictions
-- [ ] Mobile application
-- [ ] Multi-tenant support
-- [ ] Advanced reporting features
-- [ ] Integration with IoT sensors
-- [ ] Real-time notifications
+### **Previous Features**
+- ✅ Machine health monitoring dashboard
+- ✅ AI-powered chat assistant
+- ✅ Vision analysis with image processing
+- ✅ Work order generation system
+- ✅ Real-time anomaly detection
+- ✅ Interactive data visualization
 
 ---
 
-**Built with ❤️ for intelligent machine monitoring**
+**Built with ❤️ for industrial machine monitoring and maintenance optimization.**
