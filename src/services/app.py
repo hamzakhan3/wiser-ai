@@ -1107,26 +1107,87 @@ def stream_anomaly_response(query_str, image_url, machine_id=None, sensor_type="
         # Send initial status
         yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing machine anomaly...'})}\n\n"
         
-        # Get the response from handle_anomaly_source
-        response = handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
+        # Check for work order intent first
+        intent = get_intent_for_workorder(query_str)
         
-        if isinstance(response, tuple):
-            response_data = response[0].get_json()
+        if intent == "yes":
+            # For work orders, get the response and stream it
+            response = process_work_order(query_str, image_url, machine_id, sensor_type)
+            if isinstance(response, tuple):
+                response_data = response[0].get_json()
+            else:
+                response_data = response.get_json()
+            
+            response_text = response_data.get('workorder', {})
+            if isinstance(response_text, dict):
+                response_text = str(response_text)
+            
+            # Stream the work order response
+            for char in response_text:
+                yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                time.sleep(0.01)
+            
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+            return
+        
+        # For other queries, get saved analysis and combine with user prompt
+        print("🔍 Getting saved analysis and combining with user prompt")
+        
+        # Get the saved analysis from database
+        print(f"🔍 Debug: Looking for analysis with machine_id={machine_id}, image_url={image_url}")
+        saved_analysis = get_cached_analysis(machine_id, image_url)
+        print(f"🔍 Debug: saved_analysis = {saved_analysis}")
+        
+        if saved_analysis:
+            print("✅ Found saved analysis, combining with user prompt")
+            
+            # Combine saved analysis with user prompt
+            combined_prompt = f"""
+You are analyzing a machine anomaly. Below is the AI vision analysis that was previously performed on an image showing machine anomalies and sensor data patterns:
+
+**Previous Image Analysis Results:**
+{saved_analysis['analysis_text']}
+
+**User's Question:** {query_str}
+
+Please provide a detailed response based on the previous image analysis and the user's specific question. Focus on how the image analysis findings relate to what the user is asking about.
+"""
+            
+            # Send status update
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Generating contextual response...'})}\n\n"
+            
+            # Call OpenAI with streaming for real-time response
+            try:
+                response = openai.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": combined_prompt
+                        }
+                    ],
+                    max_tokens=1000,
+                    stream=True  # Enable streaming
+                )
+                
+                # Stream the response in real-time
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        yield f"data: {json.dumps({'type': 'char', 'content': content})}\n\n"
+                
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                
+            except Exception as e:
+                print(f"❌ Error calling OpenAI: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Error processing your request: {str(e)}'})}\n\n"
+        
         else:
-            response_data = response.get_json()
-        
-        response_text = response_data.get('response', '')
-        
-        # Send status update
-        yield f"data: {json.dumps({'type': 'status', 'content': 'Generating analysis...'})}\n\n"
-        
-        # Stream the response character by character
-        for char in response_text:
-            yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
-            time.sleep(0.01)  # Small delay for streaming effect
-        
-        # Send completion signal
-        yield f"data: {json.dumps({'type': 'complete', 'content': 'Analysis completed'})}\n\n"
+            print("❌ No saved analysis found, performing new vision analysis")
+            # Fallback to original vision analysis if no saved analysis exists
+            # For now, just return a message about no saved analysis
+            yield f"data: {json.dumps({'type': 'status', 'content': 'No saved analysis found. Please perform initial analysis first.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
         
     except Exception as e:
         print(f"❌ Error in stream_anomaly_response: {e}")
