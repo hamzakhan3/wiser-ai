@@ -4,7 +4,7 @@ import os
 LOCAL_DATABASE_URL = "postgresql+psycopg2://postgres:password@localhost:5432/postgres"
 
 # AWS PostgreSQL database
-AWS_DATABASE_URL = "postgresql+psycopg2://postgres:password@3.90.156.11:5432/postgres"
+AWS_DATABASE_URL = "postgresql+psycopg2://postgres:yourpassword@3.90.156.11:5432/postgres"
 
 # Get database URL from environment variable, default to local
 DATABASE_URL = os.getenv('DATABASE_URL', LOCAL_DATABASE_URL)

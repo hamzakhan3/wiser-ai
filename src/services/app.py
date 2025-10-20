@@ -129,8 +129,9 @@ openai.api_key = "sk-proj-0NgCe5zYHLbCzIPXV_zdOjWzJJUedr0sEfpiDLSGXWn6zCqEfXEltY
 
 
 # Create the PostgreSQL engine with SQL logging
+# Switched to AWS RDS Cloud Database
 engine = create_engine(
-    "postgresql+psycopg2://postgres:password@localhost:5432/postgres",
+    "postgresql+psycopg2://postgres:yourpassword@3.90.156.11:5432/postgres",
     echo=True,  # This will print all SQL queries to console
     echo_pool=True  # This will print connection pool info
 )
