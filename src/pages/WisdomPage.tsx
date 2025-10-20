@@ -18,7 +18,7 @@ const WisdomPage: React.FC = () => {
   const suggestedQueries = [
     "Which 3 machines have had the most downtime recently?",
     "How to handle breakdown during production", 
-    "Can I improve my productivity?",
+    "Can you display my machine's health status in a pie chart?",
     "Which machines are scheduled for maintenance?",
     "Top 3 machines that consume the most energy monthly?",
     "Which machines are in critical state?"

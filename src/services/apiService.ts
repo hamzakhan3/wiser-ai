@@ -301,7 +301,8 @@ export async function streamQuery(
   onStatus?: (status: string) => void,
   onComplete?: () => void,
   machineId?: string,
-  sensorType?: string
+  sensorType?: string,
+  onChart?: (chartData: any) => void
 ): Promise<void> {
   console.log(`streamQuery called with query: ${query}`);
   console.log(`Source: ${source || 'unknown'}`);
@@ -372,6 +373,10 @@ export async function streamQuery(
                 break;
               case 'status':
                 onStatus?.(data.content);
+                break;
+              case 'chart':
+                console.log('📊 Chart data received:', data.data);
+                onChart?.(data.data);
                 break;
               case 'complete':
                 onComplete?.();

@@ -1424,6 +1424,99 @@ def stream_query_response(query_str, response_format):
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
             return
         
+        # Check for chart requests about machine health
+        chart_keywords = ['chart', 'graph', 'pie', 'visualization', 'visualize', 'plot']
+        health_keywords = ['machine health', 'health status', 'machine status', 'machines']
+        
+        is_chart_request = any(keyword in query_lower for keyword in chart_keywords) or 'show me' in query_lower
+        is_health_request = any(keyword in query_lower for keyword in health_keywords)
+        
+        if is_chart_request and is_health_request:
+            # Generate machine health pie chart
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing machine health...'})}\n\n"
+            
+            try:
+                # Query the database for actual machine health data
+                with engine.connect() as conn:
+                    query = text("""
+                        SELECT 
+                            severity_level as health_status,
+                            COUNT(DISTINCT machine_id) as count
+                        FROM critical_health_machine
+                        GROUP BY severity_level
+                    """)
+                    result = conn.execute(query)
+                    rows = result.fetchall()
+                    
+                    # Build chart data
+                    chart_data = {}
+                    total_machines = 0
+                    for row in rows:
+                        status = row[0]
+                        count = row[1]
+                        chart_data[status] = count
+                        total_machines += count
+                    
+                    # If no data, use example data
+                    if total_machines == 0:
+                        chart_data = {
+                            'Critical': 2,
+                            'Warning': 5,
+                            'Normal': 4
+                        }
+                        total_machines = 11
+                    
+                    # Transform to Chart.tsx expected format
+                    labels = list(chart_data.keys())
+                    values = list(chart_data.values())
+                    # Sage-inspired sophisticated color palette
+                    colors = {
+                        'Critical': '#dc2626',      # Deep red
+                        'Warning': '#f59e0b',       # Warm amber
+                        'Normal': '#437874',        # Sage green (from sidebar - sage-500)
+                        'Unknown': '#94a3b8'        # Soft slate
+                    }
+                    background_colors = [colors.get(label, '#8884d8') for label in labels]
+                    
+                    formatted_chart_data = {
+                        'type': 'pie',
+                        'title': 'Machine Health Status Distribution',
+                        'data': {
+                            'labels': labels,
+                            'datasets': [{
+                                'label': 'Machines',
+                                'data': values,
+                                'backgroundColor': background_colors
+                            }]
+                        }
+                    }
+                    
+                    # Stream response text FIRST
+                    response_text = f"Here's the current machine health status:\n\n"
+                    for status, count in chart_data.items():
+                        response_text += f"- **{status}**: {count} machine{'s' if count != 1 else ''}\n"
+                    response_text += f"\n**Total Machines**: {total_machines}"
+                    
+                    for char in response_text:
+                        yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                        time.sleep(0.01)
+                    
+                    # Send chart data AFTER text
+                    yield f"data: {json.dumps({'type': 'chart', 'data': formatted_chart_data})}\n\n"
+                    
+                    yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                    return
+                    
+            except Exception as chart_error:
+                print(f"⚠️ Chart generation failed: {chart_error}")
+                # Fallback to text response
+                error_text = "I encountered an error generating the chart. Please try again."
+                for char in error_text:
+                    yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                    time.sleep(0.02)
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                return
+        
         # Check for table names
         table_names = ["machine_current_log", "lab", "users", "node", "machine", "lab_user", "current_sensor", "shift_machine_production", "maintenance_task"]
         contains_table_name = any(table in query_lower for table in table_names)
@@ -1592,318 +1685,6 @@ Please provide a detailed response based on the previous chart analysis and the 
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
     
-@app.route('/stream', methods=['POST'])
-def stream_response():
-    """Get AI model response without streaming"""
-    try:
-        data = request.get_json()
-        query = data.get('query', '')
-        
-        print(f"🎯 REQUEST: {query}")
-        
-        # Use the existing AI model to get a real response
-        print("🤖 Getting AI response...")
-        
-        # Check if query is asking for machine health, production, or parts distribution
-        health_keywords = ['health status', 'machine health', 'health overview', 'status of machines', 'health distribution']
-        production_keywords = ['production', 'units produced', 'output', 'manufacturing']
-        parts_keywords = ['parts distribution', 'machines by parts', 'parts produced', 'number of parts']
-        query_lower = query.lower()
-        is_health_chart_request = any(keyword in query_lower for keyword in health_keywords)
-        is_production_chart_request = any(keyword in query_lower for keyword in production_keywords)
-        is_parts_distribution_request = any(keyword in query_lower for keyword in parts_keywords)
-        
-        response_data = {
-            'content': '',
-            'chartData': None
-        }
-        
-        if is_health_chart_request:
-            print(f"📊 MACHINE HEALTH CHART REQUEST DETECTED: '{query}'")
-            
-            # Get LlamaIndex to query the database
-            print("🔍 Querying database via LlamaIndex...")
-            ai_response = query_engine.query(query)
-            response_text = str(ai_response)
-            
-            print(f"📋 LlamaIndex response: {response_text[:200]}...")
-            
-            # Now query the database directly to get structured data for the chart
-            from sqlalchemy import select, func
-            
-            metadata = MetaData()
-            health_table = Table('daily_machine_health', metadata, autoload_with=engine)
-            
-            # Get count of machines by health status
-            stmt = select(
-                health_table.c.health_status,
-                func.count(health_table.c.machine_id.distinct()).label('machine_count')
-            ).group_by(health_table.c.health_status)
-            
-            with engine.connect() as connection:
-                result = connection.execute(stmt).fetchall()
-            
-            # Color mapping for health statuses
-            color_map = {
-                'Good': '#437874',
-                'Healthy': '#437874',
-                'Normal': '#437874',
-                'Warning': '#D4A574',
-                'maintenance': '#5A8F8B',
-                'Critical': '#C67B7B',
-                'Error': '#C67B7B'
-            }
-            
-            labels = []
-            values = []
-            chart_colors = []
-            
-            for row in result:
-                status = row.health_status
-                count = int(row.machine_count)
-                labels.append(status)
-                values.append(count)
-                chart_colors.append(color_map.get(status, '#A9BBB7'))
-            
-            total_machines = sum(values)
-            
-            print(f"📊 Found {len(labels)} health statuses, {total_machines} total machines")
-            
-            # Generate insights
-            insights = f"""Machine Health Overview:
-
-📊 Fleet Status:
-- Total Machines: {total_machines}
-
-⚙️ Status Distribution:
-{chr(10).join([f"- {labels[i]}: {values[i]} machines ({values[i]/total_machines*100:.1f}%)" for i in range(len(labels))])}"""
-            
-            chart_data = {
-                'type': 'pie',
-                'title': 'Machine Health Status Distribution',
-                'insights': insights,
-                'data': {
-                    'labels': labels,
-                    'datasets': [{
-                        'label': 'Machines',
-                        'data': values,
-                        'backgroundColor': chart_colors
-                    }]
-                }
-            }
-            
-            print(f"✅ Chart data prepared from real database query")
-            
-            response_data['content'] = insights
-            response_data['chartData'] = chart_data
-            
-        elif is_production_chart_request:
-            print(f"📊 PRODUCTION CHART REQUEST DETECTED: '{query}'")
-            
-            # Get LlamaIndex to query the database
-            print("🔍 Querying database via LlamaIndex...")
-            ai_response = query_engine.query(query)
-            response_text = str(ai_response)
-            
-            print(f"📋 LlamaIndex response: {response_text[:200]}...")
-            
-            # Query production data
-            from sqlalchemy import select, func
-            
-            metadata = MetaData()
-            production_table = Table('shift_machine_production', metadata, autoload_with=engine)
-            
-            # Get total production by machine
-            stmt = select(
-                production_table.c.machine_name,
-                func.sum(production_table.c.units_produced).label('total_production')
-            ).group_by(production_table.c.machine_name).order_by(func.sum(production_table.c.units_produced).desc())
-            
-            with engine.connect() as connection:
-                result = connection.execute(stmt).fetchall()
-            
-            labels = []
-            values = []
-            
-            for row in result:
-                machine_name = row.machine_name
-                total_units = int(row.total_production) if row.total_production else 0
-                labels.append(machine_name)
-                values.append(total_units)
-            
-            total_production = sum(values)
-            
-            print(f"📊 Found {len(labels)} machines with total production: {total_production} units")
-            
-            # Generate color gradient using sage green variations
-            sage_colors = ['#437874', '#5A8F8B', '#4F8480', '#679E9A', '#7AADA9', '#3A6663', '#325B58']
-            bar_colors = [sage_colors[i % len(sage_colors)] for i in range(len(labels))]
-            
-            # Generate insights combining AI response and production data
-            insights = f"""{response_text}
-
-📊 Production Summary:
-- Total Machines: {len(labels)}
-- Total Units Produced: {total_production:,}
-
-⚙️ Production by Machine:
-{chr(10).join([f"- {labels[i]}: {values[i]:,} units ({values[i]/total_production*100:.1f}%)" for i in range(len(labels))])}"""
-            
-            chart_data = {
-                'type': 'bar',
-                'title': 'Production by Machine',
-                'insights': insights,
-                'data': {
-                    'labels': labels,
-                    'datasets': [{
-                        'label': 'Units Produced',
-                        'data': values,
-                        'backgroundColor': bar_colors  # Sage green gradient
-                    }]
-                }
-            }
-            
-            print(f"✅ Production chart data prepared")
-            
-            response_data['content'] = insights
-            response_data['chartData'] = chart_data
-            
-        elif is_parts_distribution_request:
-            print(f"📊 PARTS DISTRIBUTION CHART REQUEST DETECTED: '{query}'")
-            
-            # Get LlamaIndex to query the database
-            print("🔍 Querying database via LlamaIndex...")
-            ai_response = query_engine.query(query)
-            response_text = str(ai_response)
-            
-            # Query database for parts distribution
-            from sqlalchemy import select, func, case
-            
-            metadata = MetaData()
-            production_table = Table('shift_machine_production', metadata, autoload_with=engine)
-            
-            # Get machines grouped by production ranges (bins)
-            stmt = select(
-                production_table.c.machine_name,
-                func.sum(production_table.c.units_produced).label('total_parts')
-            ).group_by(production_table.c.machine_name)
-            
-            with engine.connect() as connection:
-                result = connection.execute(stmt).fetchall()
-            
-            # Create bins for parts produced (e.g., 0-100, 101-200, 201-300, etc.)
-            bins = {}
-            for row in result:
-                parts = int(row.total_parts) if row.total_parts else 0
-                # Determine which bin this falls into (100 parts per bin)
-                bin_size = 500
-                bin_start = (parts // bin_size) * bin_size
-                bin_label = f"{bin_start}-{bin_start + bin_size - 1}"
-                
-                if bin_label not in bins:
-                    bins[bin_label] = 0
-                bins[bin_label] += 1
-            
-            # Sort bins by parts range
-            sorted_bins = sorted(bins.items(), key=lambda x: int(x[0].split('-')[0]))
-            
-            labels = [item[0] for item in sorted_bins]
-            values = [item[1] for item in sorted_bins]
-            
-            # Use sage green color theme
-            sage_colors = ['#437874'] * len(labels)
-            
-            total_machines = sum(values)
-            
-            print(f"📊 Found {len(labels)} bins with {total_machines} total machines")
-            
-            # Generate insights
-            insights = f"""{response_text}
-
-📊 Parts Distribution Summary:
-- Total Machines: {total_machines}
-- Production Ranges: {len(labels)}
-
-⚙️ Machine Distribution by Parts Produced:
-{chr(10).join([f"- {labels[i]} parts: {values[i]} machines" for i in range(len(labels))])}"""
-            
-            chart_data = {
-                'type': 'bar',
-                'title': 'Machine Distribution by Parts Produced',
-                'insights': insights,
-                'data': {
-                    'labels': labels,  # Parts ranges on Y-axis
-                    'datasets': [{
-                        'label': 'Number of Machines',
-                        'data': values,  # Machine counts on X-axis
-                        'backgroundColor': sage_colors
-                    }]
-                }
-            }
-            
-            print(f"✅ Parts distribution chart data prepared")
-            
-            response_data['content'] = insights
-            response_data['chartData'] = chart_data
-            
-        else:
-            # Check for simple greetings first - but only if no database-related words are present
-            greeting_keywords = ['hey', 'hi', 'hello', 'good morning', 'good afternoon', 'good evening']
-            db_related_words = ['machine', 'machines', 'production', 'health', 'status', 'data', 'list', 'show', 'tell', 'about', 'query', 'database', 'table']
-            
-            query_lower = query.lower().strip()
-            
-            # Only treat as greeting if:
-            # 1. Contains a greeting keyword AND
-            # 2. Does NOT contain any database-related words AND  
-            # 3. Query is short (less than 20 characters) OR starts with greeting
-            contains_greeting = any(greeting in query_lower for greeting in greeting_keywords)
-            contains_db_words = any(word in query_lower for word in db_related_words)
-            is_short_query = len(query_lower) < 20
-            starts_with_greeting = any(query_lower.startswith(greeting) for greeting in greeting_keywords)
-            
-            is_simple_greeting = contains_greeting and not contains_db_words and (is_short_query or starts_with_greeting)
-            
-            if is_simple_greeting:
-                # Simple greeting response - no database query needed
-                print("👋 Simple greeting detected - using direct response")
-                response_data['content'] = "Hello! I'm Wise Guy, your AI assistant for machine monitoring and data analysis. How can I help you today?"
-            else:
-                # Use the existing query engine for real AI responses
-                print("🔍 Processing with AI model...")
-                response = query_engine.query(query)
-                response_text = str(response)
-                
-                # Refine with GPT-4o for better formatting and clarity
-                print("🤖 Refining response with GPT-4o...")
-                try:
-                    refined_response = openai.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": "You are a helpful assistant that formats information into clear, well-structured markdown. Make the response more readable, professional, and properly formatted with headings, lists, and emphasis where appropriate. Do not mention databases, SQL queries, or technical implementation details in your response."},
-                            {"role": "user", "content": f"Please format this information into clear, well-structured markdown: {response_text}"}
-                        ]
-                    )
-                    refined_text = refined_response.choices[0].message.content
-                    print(f"✅ GPT-4o refinement completed: {len(refined_text)} characters")
-                    
-                    # Use GPT-4o's markdown formatting directly (no additional processing)
-                    response_data['content'] = refined_text
-                    
-                except Exception as refine_error:
-                    print(f"⚠️ GPT-4o refinement failed: {refine_error}")
-                    print("📝 Using original response with basic formatting...")
-                    # Use the original response with minimal formatting
-                    response_data['content'] = response_text
-        
-        print(f"✅ AI Response received: {len(response_data['content'])} characters")
-        
-        return jsonify(response_data)
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/update-maintenance-status', methods=['POST'])
 def update_maintenance_status():
     """Update maintenance task status from 'scheduled' to 'Scheduled'"""
