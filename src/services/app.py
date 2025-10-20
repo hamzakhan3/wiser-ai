@@ -1,7 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import json
 from sqlalchemy import create_engine
 import logging
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Disable SQLAlchemy verbose logging
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
@@ -108,7 +113,8 @@ llm = OpenAI(temperature=0.1, model="gpt-3.5-turbo")
 
 from flask_cors import CORS
 
-app = Flask(__name__)
+# Initialize Flask app with static folder for React build
+app = Flask(__name__, static_folder='../../dist', static_url_path='')
 CORS(app, resources={r"/*": {"origins": "*"}}) # Enable CORS for all routes
 
 @app.before_request
@@ -123,17 +129,17 @@ def after_request(response):
     return response
 
 
-# Set the OpenAI API key
-openai.api_key = "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"
-# Initialize Flask app
-
+# Set the OpenAI API key from environment variable
+openai.api_key = os.getenv('OPENAI_API_KEY', "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")
 
 # Create the PostgreSQL engine with SQL logging
 # Switched to AWS RDS Cloud Database
+# Use environment variable for database URL (for Replit deployment)
+DATABASE_URL = os.getenv('DATABASE_URL', "postgresql+psycopg2://postgres:yourpassword@3.90.156.11:5432/postgres")
 engine = create_engine(
-    "postgresql+psycopg2://postgres:yourpassword@3.90.156.11:5432/postgres",
-    echo=True,  # This will print all SQL queries to console
-    echo_pool=True  # This will print connection pool info
+    DATABASE_URL,
+    echo=False,  # Disable verbose logging in production
+    echo_pool=False  # Disable connection pool logging in production
 )
 
 # Define machine_vision_analysis table
@@ -2446,5 +2452,25 @@ Focus on actionable insights that would help maintenance technicians understand 
         return jsonify({"error": str(e)}), 500
 
 
+# ========================================
+# REACT STATIC FILE SERVING FOR REPLIT
+# ========================================
+# These routes serve the React frontend from the dist/ folder
+# This allows Replit to serve both frontend and backend from one container
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react_app(path):
+    """Serve React static files and handle client-side routing"""
+    # If requesting a specific file that exists, serve it
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    # Otherwise, serve index.html for client-side routing
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='127.0.0.1', port=5001)
+    # Use port from environment variable (Replit) or default to 5001
+    port = int(os.getenv('PORT', 5001))
+    app.run(debug=True, host='0.0.0.0', port=port)

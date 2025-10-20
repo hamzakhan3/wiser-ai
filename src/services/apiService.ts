@@ -1,6 +1,8 @@
 // API service for communicating with the Python backend
 
-const API_URL = 'http://localhost:5001';
+// For Replit deployment: Use empty string (same origin)
+// For local development: Use 'http://localhost:5001'
+const API_URL = import.meta.env.PROD ? '' : 'http://localhost:5001';
 
 export interface QueryResponse {
   response: string;
