@@ -94,6 +94,19 @@ const ChatPage = () => {
             )
           );
           setIsLoading(false);
+        },
+        undefined, // machineId
+        undefined, // sensorType
+        // onChart - handle chart data
+        (chartData: any) => {
+          console.log('📊 Chart data received in ChatPage:', chartData);
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, chartData: chartData }
+                : msg
+            )
+          );
         }
       );
       

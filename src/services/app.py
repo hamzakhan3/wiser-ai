@@ -12,7 +12,7 @@ import openai
 from sqlalchemy import Table, MetaData, insert
 from llama_index.core import SQLDatabase
 from llama_index.llms.openai import OpenAI
-from sqlalchemy import select, func, text, and_
+from sqlalchemy import select, func, text, and_, update
 import uuid
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import insert
@@ -27,6 +27,13 @@ import time
 import imagehash
 from redis import Redis
 from PIL import Image
+
+# Matplotlib imports for chart generation
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
+import matplotlib.pyplot as plt
+import io
+from threading import Thread
 
 
 import hashlib
@@ -132,6 +139,7 @@ engine = create_engine(
 metadata = MetaData()
 metadata.reflect(bind=engine)
 machine_vision_analysis = Table('machine_vision_analysis', metadata, autoload_with=engine)
+machine_anomaly_screenshots = Table('machine_anomaly_screenshots', metadata, autoload_with=engine)
 
 # Create the SQL database object
 sql_database = SQLDatabase(engine)
@@ -208,19 +216,13 @@ def query():
         if source == "anomaly":
             machine_id = data.get("machine_id")
             sensor_type = data.get("sensor_type", "Vibration")  # Default to Vibration
-            image_url = get_machine_image_url(machine_id)
             
-            print(f"🔍 Anomaly query - Machine ID: {machine_id}, Sensor Type: {sensor_type}, Image URL: {image_url}")
-            
-            # Fallback to default image if no image found
-            if image_url is None:
-                image_url = "/Users/khanhamza/Desktop/image3.png"
-                print(f"🔄 Using fallback image: {image_url}")
+            print(f"🔍 Anomaly query - Machine ID: {machine_id}, Sensor Type: {sensor_type}")
             
             if stream:
                 # Return streaming response for anomaly queries
                 return Response(
-                    stream_with_context(stream_anomaly_response(query_str, image_url, machine_id, sensor_type)),
+                    stream_with_context(stream_anomaly_response(query_str, machine_id, sensor_type)),
                     mimetype='text/event-stream',
                     headers={
                         'Cache-Control': 'no-cache',
@@ -230,7 +232,7 @@ def query():
                     }
                 )
             else:
-                return handle_anomaly_source(query_str, image_url, machine_id, sensor_type)
+                return handle_anomaly_source(query_str, machine_id, sensor_type)
         
         if stream:
             # Return streaming response
@@ -310,6 +312,61 @@ def get_cached_response(key):
 
 def cache_response(key, response):
     redis.setex(key, 3600, response)  # 1-hour expiry
+
+def get_analysis_from_chart(machine_id, sensor_type):
+    """Get analysis from matplotlib chart stored in machine_anomaly_screenshots table"""
+    try:
+        print(f"🔍 get_analysis_from_chart: Looking for machine_id={machine_id}, sensor_type={sensor_type}")
+        with engine.connect() as conn:
+            # First try to get analysis from matplotlib chart
+            chart_result = conn.execute(
+                select(machine_anomaly_screenshots).where(
+                    and_(
+                        machine_anomaly_screenshots.c.machine_id == machine_id,
+                        machine_anomaly_screenshots.c.sensor_type == sensor_type
+                    )
+                )
+            )
+            chart_row = chart_result.fetchone()
+            
+            if chart_row and chart_row.analysis_id:
+                print(f"✅ Found matplotlib chart with analysis_id={chart_row.analysis_id}")
+                
+                # Get the analysis from machine_vision_analysis table
+                analysis_result = conn.execute(
+                    select(machine_vision_analysis).where(
+                        machine_vision_analysis.c.id == chart_row.analysis_id
+                    )
+                )
+                analysis_row = analysis_result.fetchone()
+                
+                if analysis_row:
+                    print(f"✅ Found analysis for matplotlib chart")
+                    return {
+                        'analysis_text': analysis_row.analysis_text,
+                        'sensor_type': analysis_row.sensor_type,
+                        'created_at': analysis_row.created_at.isoformat(),
+                        'chart_title': chart_row.chart_title
+                    }
+            
+            # Fallback: get the most recent analysis for this machine from any source
+            result = conn.execute(
+                select(machine_vision_analysis).where(
+                    machine_vision_analysis.c.machine_id == machine_id
+                ).order_by(machine_vision_analysis.c.created_at.desc())
+            )
+            row = result.fetchone()
+            print(f"🔍 get_analysis_from_chart: Found fallback analysis = {row is not None}")
+            if row:
+                return {
+                    'analysis_text': row.analysis_text,
+                    'sensor_type': row.sensor_type,
+                    'created_at': row.created_at.isoformat(),
+                    'chart_title': None
+                }
+    except Exception as e:
+        print(f"Error getting analysis from chart: {e}")
+    return None
 
 def get_cached_analysis(machine_id, image_path=None):
     """Get cached analysis from database - if image_path is provided, try exact match first, then fallback to any analysis for machine"""
@@ -403,7 +460,7 @@ def save_analysis_to_db(machine_id, image_path, sensor_type, analysis_text):
 
 
 
-def handle_anomaly_source(query_str, image_url, machine_id=None, sensor_type="Vibration"):
+def handle_anomaly_source(query_str, machine_id=None, sensor_type="Vibration"):
     global first_prompt, final_prompt
     queue = vision_responses
     
@@ -411,29 +468,40 @@ def handle_anomaly_source(query_str, image_url, machine_id=None, sensor_type="Vi
     intent = get_intent_for_workorder(query_str)
     
     if intent == "yes":
+        # For work orders, we still need an image_url for the legacy process_work_order function
+        # This will be updated in a future iteration
+        image_url = f"chart_{machine_id}_{sensor_type}.png"  # Placeholder
         return process_work_order(query_str, image_url, machine_id, sensor_type)
     
-    # For all other queries, get saved analysis and combine with user prompt
-    print("🔍 Getting saved analysis and combining with user prompt")
+    # For all other queries, get saved analysis from matplotlib chart and combine with user prompt
+    print("🔍 Getting saved analysis from chart and combining with user prompt")
     
-    # Get the saved analysis from database
-    print(f"🔍 Debug: Looking for analysis with machine_id={machine_id}, image_url={image_url}")
-    saved_analysis = get_cached_analysis(machine_id, image_url)
+    # Get the saved analysis from matplotlib chart
+    print(f"🔍 Debug: Looking for chart analysis with machine_id={machine_id}, sensor_type={sensor_type}")
+    saved_analysis = get_analysis_from_chart(machine_id, sensor_type)
     print(f"🔍 Debug: saved_analysis = {saved_analysis}")
     
     if saved_analysis:
-        print("✅ Found saved analysis, combining with user prompt")
+        print("✅ Found saved analysis from chart, combining with user prompt")
+        
+        # Get chart title for better context
+        chart_title = saved_analysis.get('chart_title', f'{sensor_type} Sensor Data')
         
         # Combine saved analysis with user prompt
         combined_prompt = f"""
-You are analyzing a machine anomaly. Below is the AI vision analysis that was previously performed on an image showing machine anomalies and sensor data patterns:
+You are analyzing a machine anomaly. Below is the AI vision analysis that was previously performed on a matplotlib chart showing machine anomalies and sensor data patterns:
 
-**Previous Image Analysis Results:**
+**Chart Information:**
+- Chart Title: {chart_title}
+- Machine ID: {machine_id}
+- Sensor Type: {sensor_type}
+
+**Previous Chart Analysis Results:**
 {saved_analysis['analysis_text']}
 
 **User's Question:** {query_str}
 
-Please provide a detailed response based on the previous image analysis and the user's specific question. Focus on how the image analysis findings relate to what the user is asking about.
+Please provide a detailed response based on the previous chart analysis and the user's specific question. Focus on how the chart analysis findings relate to what the user is asking about.
 """
         
         # Call OpenAI with the combined prompt (no image needed since we have the analysis)
@@ -467,6 +535,8 @@ Please provide a detailed response based on the previous image analysis and the 
     else:
         print("❌ No saved analysis found, performing new vision analysis")
         # Fallback to original vision analysis if no saved analysis exists
+        # This will trigger chart generation if needed
+        image_url = f"chart_{machine_id}_{sensor_type}.png"  # Placeholder
         return process_vision_first_prompt(query_str, image_url, machine_id, sensor_type)
 
 @log_time
@@ -722,7 +792,53 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None, sensor_t
         print(f"❌ Error generating image hash: {e}")
         image_hash = None
     
-    # Step 2: Check for cached analysis in database
+    # Step 2: Check for matplotlib chart in database first
+    print(f"🔍 Checking for matplotlib chart in database for machine_id={machine_id}, sensor_type={sensor_type}")
+    try:
+        with engine.connect() as conn:
+            chart_result = conn.execute(
+                select(machine_anomaly_screenshots).where(
+                    and_(
+                        machine_anomaly_screenshots.c.machine_id == machine_id,
+                        machine_anomaly_screenshots.c.sensor_type == sensor_type
+                    )
+                )
+            )
+            chart_row = chart_result.fetchone()
+            
+            if chart_row and chart_row.analysis_id:
+                print(f"✅ Found matplotlib chart with analysis in database")
+                
+                # Get the analysis from machine_vision_analysis table
+                analysis_result = conn.execute(
+                    select(machine_vision_analysis).where(
+                        machine_vision_analysis.c.id == chart_row.analysis_id
+                    )
+                )
+                analysis_row = analysis_result.fetchone()
+                
+                if analysis_row:
+                    print(f"✅ Found analysis for matplotlib chart")
+                    
+                    # Create a mock response object that matches OpenAI's structure
+                    class MockResponse:
+                        def __init__(self, content):
+                            self.choices = [MockChoice(content)]
+                    
+                    class MockChoice:
+                        def __init__(self, content):
+                            self.message = MockMessage(content)
+                    
+                    class MockMessage:
+                        def __init__(self, content):
+                            self.content = content
+                    
+                    final_response = MockResponse(analysis_row.analysis_text)
+                    return finalize_vision_response(final_response)
+    except Exception as e:
+        print(f"❌ Error checking for matplotlib chart: {e}")
+    
+    # Step 3: Check for cached analysis in database (fallback)
     cached_analysis = get_cached_analysis(machine_id, image_path)
     if cached_analysis:
         print(f"✅ Found cached analysis in database")
@@ -743,7 +859,7 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None, sensor_t
         final_response = MockResponse(cached_analysis['analysis_text'])
         return finalize_vision_response(final_response)
     
-    # Step 3: No cached analysis found, call OpenAI Vision API
+    # Step 4: No cached analysis found, call OpenAI Vision API
     print(f"🚀 No cached analysis found, calling OpenAI Vision API...")
     
     try:
@@ -776,7 +892,7 @@ def process_vision_first_prompt(query_str, image_path, machine_id=None, sensor_t
         analysis_text = response.choices[0].message.content
         print(f"✅ OpenAI Vision API response received")
         
-        # Step 4: Save analysis to database
+        # Step 5: Save analysis to database
         if analysis_text:
             success = save_analysis_to_db(machine_id, image_path, sensor_type, analysis_text)
             if success:
@@ -857,6 +973,272 @@ def finalize_vision_response(openai_response):
         "response": vision_result,
         "format": "vision"
     })
+
+
+def generate_chart_image(machine_id, sensor_type, machine_name):
+    """Generate matplotlib chart from sensor data and return as base64 string"""
+    try:
+        print(f"📊 Generating matplotlib chart for machine_id={machine_id}, sensor_type={sensor_type}")
+        
+        # Get metadata and tables
+        metadata = MetaData()
+        metadata.reflect(bind=engine)
+        
+        # Define anomaly data (same as in /inspection endpoint)
+        anomalies = [
+            {
+                "start": "2024-03-02T21:41:00.000Z",
+                "end": "2024-03-02T22:55:00.000Z"
+            },
+            {
+                "start": "2024-03-03T01:55:00.000Z",
+                "end": "2024-03-03T02:41:00.000Z"
+            },
+            {
+                "start": "2024-03-03T15:41:00.000Z",
+                "end": "2024-03-03T17:41:00.000Z"
+            }
+        ]
+
+        anomalies_current = [
+            {
+                "start": "2024-03-01T17:41:00.000Z",
+                "end": "2024-03-01T19:41:00.000Z"
+            }
+        ]
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        if sensor_type == "Current":
+            # Multi-value data from inference_data_multi
+            inference_data_multi = Table('inference_data_multi', metadata, autoload_with=engine)
+            stmt = select(inference_data_multi)
+            
+            if machine_id:
+                try:
+                    machine_id_uuid = uuid.UUID(machine_id)
+                    stmt = stmt.where(inference_data_multi.c.machine_id == machine_id_uuid)
+                except Exception as e:
+                    print(f"Invalid UUID format for machine_id: {e}")
+                    return None
+
+            with engine.connect() as conn:
+                result = conn.execute(stmt)
+                multi_value_data = [
+                    {
+                        "timestamp": row["timestamp"],
+                        "value1": row["value1"],
+                        "value2": row["value2"],
+                        "value3": row["value3"]
+                    }
+                    for row in result.mappings()
+                ][::100]  # Downsample
+            
+            if not multi_value_data:
+                print("❌ No multi-value data found")
+                return None
+                
+            # Convert timestamps to datetime objects (already datetime from DB)
+            timestamps = [point["timestamp"] if isinstance(point["timestamp"], datetime) else parser.parse(point["timestamp"]) for point in multi_value_data]
+            values1 = [point["value1"] for point in multi_value_data]
+            values2 = [point["value2"] for point in multi_value_data]
+            values3 = [point["value3"] for point in multi_value_data]
+            
+            # Plot multi-line chart
+            ax.plot(timestamps, values1, label='Current 1', linewidth=2)
+            ax.plot(timestamps, values2, label='Current 2', linewidth=2)
+            ax.plot(timestamps, values3, label='Current 3', linewidth=2)
+            
+            # Add anomaly regions
+            for anomaly in anomalies_current:
+                start_time = parser.parse(anomaly['start'])
+                end_time = parser.parse(anomaly['end'])
+                ax.axvspan(start_time, end_time, alpha=0.3, color='red', label='Anomaly' if anomaly == anomalies_current[0] else "")
+            
+            ax.set_ylabel('Current (A)')
+            ax.set_title(f'{machine_name or "Machine"} - Current Sensor Data')
+            
+        else:
+            # Single-value data from inference_data
+            inference_data = Table('inference_data', metadata, autoload_with=engine)
+            stmt = select(inference_data)
+            
+            if machine_id:
+                try:
+                    machine_id_uuid = uuid.UUID(machine_id)
+                    stmt = stmt.where(inference_data.c.machine_id == machine_id_uuid)
+                except Exception as e:
+                    print(f"Invalid UUID format for machine_id: {e}")
+                    return None
+
+            with engine.connect() as conn:
+                result = conn.execute(stmt)
+                vibration_data = [
+                    {
+                        "timestamp": row["timestamp"],
+                        "value": row["value"]
+                    }
+                    for row in result.mappings()
+                ][::4]  # Downsample
+            
+            if not vibration_data:
+                print("❌ No vibration data found")
+                return None
+                
+            # Convert timestamps to datetime objects (already datetime from DB)
+            timestamps = [point["timestamp"] if isinstance(point["timestamp"], datetime) else parser.parse(point["timestamp"]) for point in vibration_data]
+            values = [point["value"] for point in vibration_data]
+            
+            # Plot single line chart
+            ax.plot(timestamps, values, label='Vibration', linewidth=2, color='blue')
+            
+            # Add anomaly regions
+            for anomaly in anomalies:
+                start_time = parser.parse(anomaly['start'])
+                end_time = parser.parse(anomaly['end'])
+                ax.axvspan(start_time, end_time, alpha=0.3, color='red', label='Anomaly' if anomaly == anomalies[0] else "")
+            
+            ax.set_ylabel('Vibration (mm/s)')
+            ax.set_title(f'{machine_name or "Machine"} - Vibration Sensor Data')
+        
+        # Common chart formatting
+        ax.set_xlabel('Time')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Rotate x-axis labels for better readability
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        # Save to BytesIO buffer
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        buf.seek(0)
+        img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        plt.close(fig)
+        
+        print(f"✅ Generated matplotlib chart, size: {len(img_base64)} characters")
+        return img_base64
+        
+    except Exception as e:
+        print(f"❌ Error generating chart: {e}")
+        if 'fig' in locals():
+            plt.close(fig)
+        return None
+
+
+def background_chart_generation(machine_id, sensor_type, machine_name):
+    """Background function to generate chart and save to database"""
+    try:
+        print(f"🔄 Background chart generation started for machine_id={machine_id}, sensor_type={sensor_type}")
+        
+        # Check if chart already exists
+        with engine.connect() as conn:
+            existing_result = conn.execute(
+                select(machine_anomaly_screenshots).where(
+                    and_(
+                        machine_anomaly_screenshots.c.machine_id == machine_id,
+                        machine_anomaly_screenshots.c.sensor_type == sensor_type
+                    )
+                )
+            )
+            existing_row = existing_result.fetchone()
+            
+            if existing_row:
+                print(f"✅ Chart already exists for machine_id={machine_id}, sensor_type={sensor_type}")
+                return
+        
+        # Generate matplotlib chart
+        chart_base64 = generate_chart_image(machine_id, sensor_type, machine_name)
+        if not chart_base64:
+            print(f"❌ Failed to generate chart for machine_id={machine_id}")
+            return
+        
+        # Convert base64 to binary data
+        chart_binary = base64.b64decode(chart_base64)
+        
+        # Save chart to database
+        chart_title = f'{machine_name or "Machine"} - {sensor_type} Sensor Data'
+        with engine.connect() as conn:
+            insert_stmt = insert(machine_anomaly_screenshots).values(
+                machine_id=machine_id,
+                sensor_type=sensor_type,
+                screenshot_data=chart_binary,
+                screenshot_url=f"chart_{machine_id}_{sensor_type}_{int(time.time())}.png",
+                chart_title=chart_title
+            )
+            
+            result = conn.execute(insert_stmt)
+            screenshot_id = result.inserted_primary_key[0]
+            conn.commit()
+            
+            print(f"✅ Background chart saved with ID: {screenshot_id}")
+            
+            # Trigger OpenAI vision analysis
+            print(f"🤖 Background OpenAI vision analysis starting...")
+            
+            try:
+                # Call OpenAI Vision API with the base64 image
+                response = openai.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text", 
+                                "text": f"""Analyze this machine anomaly graph titled "{chart_title}" showing {sensor_type} sensor data for {machine_name or "Machine"} (ID: {machine_id}). 
+
+Please provide a comprehensive analysis including:
+
+1. **Graph Overview**: Describe what you see in the chart - data patterns, trends, and overall behavior
+2. **Anomaly Detection**: Identify any anomalies, spikes, or unusual patterns in the data
+3. **Root Cause Analysis**: Provide 5 likely causes for any detected anomalies with detailed explanations
+4. **Severity Assessment**: Rate the severity of issues (Low/Medium/High/Critical)
+5. **Recommended Actions**: Specific maintenance or troubleshooting steps to address the issues
+6. **Preventive Measures**: Suggestions to prevent similar issues in the future
+
+Focus on actionable insights that would help maintenance technicians understand and resolve the machine issues."""
+                            },
+                            {
+                                "type": "image_url", 
+                                "image_url": {"url": f"data:image/png;base64,{chart_base64}"}
+                            }
+                        ]
+                    }],
+                    max_tokens=1500
+                )
+                
+                analysis_text = response.choices[0].message.content
+                print(f"✅ Background OpenAI vision analysis completed")
+                
+                # Save analysis to machine_vision_analysis table
+                analysis_insert = insert(machine_vision_analysis).values(
+                    machine_id=machine_id,
+                    image_path=f"chart_{machine_id}_{sensor_type}_{int(time.time())}.png",
+                    analysis_text=analysis_text,
+                    sensor_type=sensor_type
+                )
+                
+                analysis_result = conn.execute(analysis_insert)
+                analysis_id = analysis_result.inserted_primary_key[0]
+                conn.commit()
+                
+                # Update screenshot record with analysis_id
+                update_stmt = update(machine_anomaly_screenshots).where(
+                    machine_anomaly_screenshots.c.id == screenshot_id
+                ).values(analysis_id=analysis_id)
+                
+                conn.execute(update_stmt)
+                conn.commit()
+                
+                print(f"✅ Background analysis saved with ID: {analysis_id} and linked to chart")
+                
+            except Exception as analysis_error:
+                print(f"❌ Error during background OpenAI analysis: {analysis_error}")
+                
+    except Exception as e:
+        print(f"❌ Error in background_chart_generation: {e}")
 
 
 @log_time
@@ -1042,6 +1424,99 @@ def stream_query_response(query_str, response_format):
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
             return
         
+        # Check for chart requests about machine health
+        chart_keywords = ['chart', 'graph', 'pie', 'visualization', 'visualize', 'plot']
+        health_keywords = ['machine health', 'health status', 'machine status', 'machines']
+        
+        is_chart_request = any(keyword in query_lower for keyword in chart_keywords) or 'show me' in query_lower
+        is_health_request = any(keyword in query_lower for keyword in health_keywords)
+        
+        if is_chart_request and is_health_request:
+            # Generate machine health pie chart
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing machine health...'})}\n\n"
+            
+            try:
+                # Query the database for actual machine health data
+                with engine.connect() as conn:
+                    query = text("""
+                        SELECT 
+                            severity_level as health_status,
+                            COUNT(DISTINCT machine_id) as count
+                        FROM critical_health_machine
+                        GROUP BY severity_level
+                    """)
+                    result = conn.execute(query)
+                    rows = result.fetchall()
+                    
+                    # Build chart data
+                    chart_data = {}
+                    total_machines = 0
+                    for row in rows:
+                        status = row[0]
+                        count = row[1]
+                        chart_data[status] = count
+                        total_machines += count
+                    
+                    # If no data, use example data
+                    if total_machines == 0:
+                        chart_data = {
+                            'Critical': 2,
+                            'Warning': 5,
+                            'Normal': 4
+                        }
+                        total_machines = 11
+                    
+                    # Transform to Chart.tsx expected format
+                    labels = list(chart_data.keys())
+                    values = list(chart_data.values())
+                    # Sage-inspired sophisticated color palette
+                    colors = {
+                        'Critical': '#dc2626',      # Deep red
+                        'Warning': '#f59e0b',       # Warm amber
+                        'Normal': '#437874',        # Sage green (from sidebar - sage-500)
+                        'Unknown': '#94a3b8'        # Soft slate
+                    }
+                    background_colors = [colors.get(label, '#8884d8') for label in labels]
+                    
+                    formatted_chart_data = {
+                        'type': 'pie',
+                        'title': 'Machine Health Status Distribution',
+                        'data': {
+                            'labels': labels,
+                            'datasets': [{
+                                'label': 'Machines',
+                                'data': values,
+                                'backgroundColor': background_colors
+                            }]
+                        }
+                    }
+                    
+                    # Stream response text FIRST
+                    response_text = f"Here's the current machine health status:\n\n"
+                    for status, count in chart_data.items():
+                        response_text += f"- **{status}**: {count} machine{'s' if count != 1 else ''}\n"
+                    response_text += f"\n**Total Machines**: {total_machines}"
+                    
+                    for char in response_text:
+                        yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                        time.sleep(0.01)
+                    
+                    # Send chart data AFTER text
+                    yield f"data: {json.dumps({'type': 'chart', 'data': formatted_chart_data})}\n\n"
+                    
+                    yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                    return
+                    
+            except Exception as chart_error:
+                print(f"⚠️ Chart generation failed: {chart_error}")
+                # Fallback to text response
+                error_text = "I encountered an error generating the chart. Please try again."
+                for char in error_text:
+                    yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                    time.sleep(0.02)
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                return
+        
         # Check for table names
         table_names = ["machine_current_log", "lab", "users", "node", "machine", "lab_user", "current_sensor", "shift_machine_production", "maintenance_task"]
         contains_table_name = any(table in query_lower for table in table_names)
@@ -1098,11 +1573,11 @@ def stream_query_response(query_str, response_format):
             time.sleep(0.02)
         yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
-def stream_anomaly_response(query_str, image_url, machine_id=None, sensor_type="Vibration"):
+def stream_anomaly_response(query_str, machine_id=None, sensor_type="Vibration"):
     """Stream response for anomaly queries with vision analysis"""
     try:
         print(f"🚀 Starting anomaly stream for query: {query_str}")
-        print(f"🔍 Machine ID: {machine_id}, Sensor Type: {sensor_type}, Image URL: {image_url}")
+        print(f"🔍 Machine ID: {machine_id}, Sensor Type: {sensor_type}")
         
         # Send initial status
         yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing machine anomaly...'})}\n\n"
@@ -1112,6 +1587,7 @@ def stream_anomaly_response(query_str, image_url, machine_id=None, sensor_type="
         
         if intent == "yes":
             # For work orders, get the response and stream it
+            image_url = f"chart_{machine_id}_{sensor_type}.png"  # Placeholder
             response = process_work_order(query_str, image_url, machine_id, sensor_type)
             if isinstance(response, tuple):
                 response_data = response[0].get_json()
@@ -1130,27 +1606,35 @@ def stream_anomaly_response(query_str, image_url, machine_id=None, sensor_type="
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
             return
         
-        # For other queries, get saved analysis and combine with user prompt
-        print("🔍 Getting saved analysis and combining with user prompt")
+        # For other queries, get saved analysis from chart and combine with user prompt
+        print("🔍 Getting saved analysis from chart and combining with user prompt")
         
-        # Get the saved analysis from database
-        print(f"🔍 Debug: Looking for analysis with machine_id={machine_id}, image_url={image_url}")
-        saved_analysis = get_cached_analysis(machine_id, image_url)
+        # Get the saved analysis from matplotlib chart
+        print(f"🔍 Debug: Looking for chart analysis with machine_id={machine_id}, sensor_type={sensor_type}")
+        saved_analysis = get_analysis_from_chart(machine_id, sensor_type)
         print(f"🔍 Debug: saved_analysis = {saved_analysis}")
         
         if saved_analysis:
-            print("✅ Found saved analysis, combining with user prompt")
+            print("✅ Found saved analysis from chart, combining with user prompt")
+            
+            # Get chart title for better context
+            chart_title = saved_analysis.get('chart_title', f'{sensor_type} Sensor Data')
             
             # Combine saved analysis with user prompt
             combined_prompt = f"""
-You are analyzing a machine anomaly. Below is the AI vision analysis that was previously performed on an image showing machine anomalies and sensor data patterns:
+You are analyzing a machine anomaly. Below is the AI vision analysis that was previously performed on a matplotlib chart showing machine anomalies and sensor data patterns:
 
-**Previous Image Analysis Results:**
+**Chart Information:**
+- Chart Title: {chart_title}
+- Machine ID: {machine_id}
+- Sensor Type: {sensor_type}
+
+**Previous Chart Analysis Results:**
 {saved_analysis['analysis_text']}
 
 **User's Question:** {query_str}
 
-Please provide a detailed response based on the previous image analysis and the user's specific question. Focus on how the image analysis findings relate to what the user is asking about.
+Please provide a detailed response based on the previous chart analysis and the user's specific question. Focus on how the chart analysis findings relate to what the user is asking about.
 """
             
             # Send status update
@@ -1185,8 +1669,15 @@ Please provide a detailed response based on the previous image analysis and the 
         else:
             print("❌ No saved analysis found, performing new vision analysis")
             # Fallback to original vision analysis if no saved analysis exists
-            # For now, just return a message about no saved analysis
-            yield f"data: {json.dumps({'type': 'status', 'content': 'No saved analysis found. Please perform initial analysis first.'})}\n\n"
+            # This part needs to be adapted for streaming if process_vision_first_prompt is not streaming
+            # For now, we'll simulate streaming the non-streaming response
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Performing new vision analysis...'})}\n\n"
+            image_url = f"chart_{machine_id}_{sensor_type}.png"  # Placeholder
+            response_data = process_vision_first_prompt(query_str, image_url, machine_id, sensor_type)
+            response_text = response_data.get_json().get('response', '')
+            for char in response_text:
+                yield f"data: {json.dumps({'type': 'char', 'content': char})}\n\n"
+                time.sleep(0.01)
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
         
     except Exception as e:
@@ -1194,318 +1685,6 @@ Please provide a detailed response based on the previous image analysis and the 
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
     
-@app.route('/stream', methods=['POST'])
-def stream_response():
-    """Get AI model response without streaming"""
-    try:
-        data = request.get_json()
-        query = data.get('query', '')
-        
-        print(f"🎯 REQUEST: {query}")
-        
-        # Use the existing AI model to get a real response
-        print("🤖 Getting AI response...")
-        
-        # Check if query is asking for machine health, production, or parts distribution
-        health_keywords = ['health status', 'machine health', 'health overview', 'status of machines', 'health distribution']
-        production_keywords = ['production', 'units produced', 'output', 'manufacturing']
-        parts_keywords = ['parts distribution', 'machines by parts', 'parts produced', 'number of parts']
-        query_lower = query.lower()
-        is_health_chart_request = any(keyword in query_lower for keyword in health_keywords)
-        is_production_chart_request = any(keyword in query_lower for keyword in production_keywords)
-        is_parts_distribution_request = any(keyword in query_lower for keyword in parts_keywords)
-        
-        response_data = {
-            'content': '',
-            'chartData': None
-        }
-        
-        if is_health_chart_request:
-            print(f"📊 MACHINE HEALTH CHART REQUEST DETECTED: '{query}'")
-            
-            # Get LlamaIndex to query the database
-            print("🔍 Querying database via LlamaIndex...")
-            ai_response = query_engine.query(query)
-            response_text = str(ai_response)
-            
-            print(f"📋 LlamaIndex response: {response_text[:200]}...")
-            
-            # Now query the database directly to get structured data for the chart
-            from sqlalchemy import select, func
-            
-            metadata = MetaData()
-            health_table = Table('daily_machine_health', metadata, autoload_with=engine)
-            
-            # Get count of machines by health status
-            stmt = select(
-                health_table.c.health_status,
-                func.count(health_table.c.machine_id.distinct()).label('machine_count')
-            ).group_by(health_table.c.health_status)
-            
-            with engine.connect() as connection:
-                result = connection.execute(stmt).fetchall()
-            
-            # Color mapping for health statuses
-            color_map = {
-                'Good': '#437874',
-                'Healthy': '#437874',
-                'Normal': '#437874',
-                'Warning': '#D4A574',
-                'maintenance': '#5A8F8B',
-                'Critical': '#C67B7B',
-                'Error': '#C67B7B'
-            }
-            
-            labels = []
-            values = []
-            chart_colors = []
-            
-            for row in result:
-                status = row.health_status
-                count = int(row.machine_count)
-                labels.append(status)
-                values.append(count)
-                chart_colors.append(color_map.get(status, '#A9BBB7'))
-            
-            total_machines = sum(values)
-            
-            print(f"📊 Found {len(labels)} health statuses, {total_machines} total machines")
-            
-            # Generate insights
-            insights = f"""Machine Health Overview:
-
-📊 Fleet Status:
-- Total Machines: {total_machines}
-
-⚙️ Status Distribution:
-{chr(10).join([f"- {labels[i]}: {values[i]} machines ({values[i]/total_machines*100:.1f}%)" for i in range(len(labels))])}"""
-            
-            chart_data = {
-                'type': 'pie',
-                'title': 'Machine Health Status Distribution',
-                'insights': insights,
-                'data': {
-                    'labels': labels,
-                    'datasets': [{
-                        'label': 'Machines',
-                        'data': values,
-                        'backgroundColor': chart_colors
-                    }]
-                }
-            }
-            
-            print(f"✅ Chart data prepared from real database query")
-            
-            response_data['content'] = insights
-            response_data['chartData'] = chart_data
-            
-        elif is_production_chart_request:
-            print(f"📊 PRODUCTION CHART REQUEST DETECTED: '{query}'")
-            
-            # Get LlamaIndex to query the database
-            print("🔍 Querying database via LlamaIndex...")
-            ai_response = query_engine.query(query)
-            response_text = str(ai_response)
-            
-            print(f"📋 LlamaIndex response: {response_text[:200]}...")
-            
-            # Query production data
-            from sqlalchemy import select, func
-            
-            metadata = MetaData()
-            production_table = Table('shift_machine_production', metadata, autoload_with=engine)
-            
-            # Get total production by machine
-            stmt = select(
-                production_table.c.machine_name,
-                func.sum(production_table.c.units_produced).label('total_production')
-            ).group_by(production_table.c.machine_name).order_by(func.sum(production_table.c.units_produced).desc())
-            
-            with engine.connect() as connection:
-                result = connection.execute(stmt).fetchall()
-            
-            labels = []
-            values = []
-            
-            for row in result:
-                machine_name = row.machine_name
-                total_units = int(row.total_production) if row.total_production else 0
-                labels.append(machine_name)
-                values.append(total_units)
-            
-            total_production = sum(values)
-            
-            print(f"📊 Found {len(labels)} machines with total production: {total_production} units")
-            
-            # Generate color gradient using sage green variations
-            sage_colors = ['#437874', '#5A8F8B', '#4F8480', '#679E9A', '#7AADA9', '#3A6663', '#325B58']
-            bar_colors = [sage_colors[i % len(sage_colors)] for i in range(len(labels))]
-            
-            # Generate insights combining AI response and production data
-            insights = f"""{response_text}
-
-📊 Production Summary:
-- Total Machines: {len(labels)}
-- Total Units Produced: {total_production:,}
-
-⚙️ Production by Machine:
-{chr(10).join([f"- {labels[i]}: {values[i]:,} units ({values[i]/total_production*100:.1f}%)" for i in range(len(labels))])}"""
-            
-            chart_data = {
-                'type': 'bar',
-                'title': 'Production by Machine',
-                'insights': insights,
-                'data': {
-                    'labels': labels,
-                    'datasets': [{
-                        'label': 'Units Produced',
-                        'data': values,
-                        'backgroundColor': bar_colors  # Sage green gradient
-                    }]
-                }
-            }
-            
-            print(f"✅ Production chart data prepared")
-            
-            response_data['content'] = insights
-            response_data['chartData'] = chart_data
-            
-        elif is_parts_distribution_request:
-            print(f"📊 PARTS DISTRIBUTION CHART REQUEST DETECTED: '{query}'")
-            
-            # Get LlamaIndex to query the database
-            print("🔍 Querying database via LlamaIndex...")
-            ai_response = query_engine.query(query)
-            response_text = str(ai_response)
-            
-            # Query database for parts distribution
-            from sqlalchemy import select, func, case
-            
-            metadata = MetaData()
-            production_table = Table('shift_machine_production', metadata, autoload_with=engine)
-            
-            # Get machines grouped by production ranges (bins)
-            stmt = select(
-                production_table.c.machine_name,
-                func.sum(production_table.c.units_produced).label('total_parts')
-            ).group_by(production_table.c.machine_name)
-            
-            with engine.connect() as connection:
-                result = connection.execute(stmt).fetchall()
-            
-            # Create bins for parts produced (e.g., 0-100, 101-200, 201-300, etc.)
-            bins = {}
-            for row in result:
-                parts = int(row.total_parts) if row.total_parts else 0
-                # Determine which bin this falls into (100 parts per bin)
-                bin_size = 500
-                bin_start = (parts // bin_size) * bin_size
-                bin_label = f"{bin_start}-{bin_start + bin_size - 1}"
-                
-                if bin_label not in bins:
-                    bins[bin_label] = 0
-                bins[bin_label] += 1
-            
-            # Sort bins by parts range
-            sorted_bins = sorted(bins.items(), key=lambda x: int(x[0].split('-')[0]))
-            
-            labels = [item[0] for item in sorted_bins]
-            values = [item[1] for item in sorted_bins]
-            
-            # Use sage green color theme
-            sage_colors = ['#437874'] * len(labels)
-            
-            total_machines = sum(values)
-            
-            print(f"📊 Found {len(labels)} bins with {total_machines} total machines")
-            
-            # Generate insights
-            insights = f"""{response_text}
-
-📊 Parts Distribution Summary:
-- Total Machines: {total_machines}
-- Production Ranges: {len(labels)}
-
-⚙️ Machine Distribution by Parts Produced:
-{chr(10).join([f"- {labels[i]} parts: {values[i]} machines" for i in range(len(labels))])}"""
-            
-            chart_data = {
-                'type': 'bar',
-                'title': 'Machine Distribution by Parts Produced',
-                'insights': insights,
-                'data': {
-                    'labels': labels,  # Parts ranges on Y-axis
-                    'datasets': [{
-                        'label': 'Number of Machines',
-                        'data': values,  # Machine counts on X-axis
-                        'backgroundColor': sage_colors
-                    }]
-                }
-            }
-            
-            print(f"✅ Parts distribution chart data prepared")
-            
-            response_data['content'] = insights
-            response_data['chartData'] = chart_data
-            
-        else:
-            # Check for simple greetings first - but only if no database-related words are present
-            greeting_keywords = ['hey', 'hi', 'hello', 'good morning', 'good afternoon', 'good evening']
-            db_related_words = ['machine', 'machines', 'production', 'health', 'status', 'data', 'list', 'show', 'tell', 'about', 'query', 'database', 'table']
-            
-            query_lower = query.lower().strip()
-            
-            # Only treat as greeting if:
-            # 1. Contains a greeting keyword AND
-            # 2. Does NOT contain any database-related words AND  
-            # 3. Query is short (less than 20 characters) OR starts with greeting
-            contains_greeting = any(greeting in query_lower for greeting in greeting_keywords)
-            contains_db_words = any(word in query_lower for word in db_related_words)
-            is_short_query = len(query_lower) < 20
-            starts_with_greeting = any(query_lower.startswith(greeting) for greeting in greeting_keywords)
-            
-            is_simple_greeting = contains_greeting and not contains_db_words and (is_short_query or starts_with_greeting)
-            
-            if is_simple_greeting:
-                # Simple greeting response - no database query needed
-                print("👋 Simple greeting detected - using direct response")
-                response_data['content'] = "Hello! I'm Wise Guy, your AI assistant for machine monitoring and data analysis. How can I help you today?"
-            else:
-                # Use the existing query engine for real AI responses
-                print("🔍 Processing with AI model...")
-                response = query_engine.query(query)
-                response_text = str(response)
-                
-                # Refine with GPT-4o for better formatting and clarity
-                print("🤖 Refining response with GPT-4o...")
-                try:
-                    refined_response = openai.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": "You are a helpful assistant that formats information into clear, well-structured markdown. Make the response more readable, professional, and properly formatted with headings, lists, and emphasis where appropriate. Do not mention databases, SQL queries, or technical implementation details in your response."},
-                            {"role": "user", "content": f"Please format this information into clear, well-structured markdown: {response_text}"}
-                        ]
-                    )
-                    refined_text = refined_response.choices[0].message.content
-                    print(f"✅ GPT-4o refinement completed: {len(refined_text)} characters")
-                    
-                    # Use GPT-4o's markdown formatting directly (no additional processing)
-                    response_data['content'] = refined_text
-                    
-                except Exception as refine_error:
-                    print(f"⚠️ GPT-4o refinement failed: {refine_error}")
-                    print("📝 Using original response with basic formatting...")
-                    # Use the original response with minimal formatting
-                    response_data['content'] = response_text
-        
-        print(f"✅ AI Response received: {len(response_data['content'])} characters")
-        
-        return jsonify(response_data)
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/update-maintenance-status', methods=['POST'])
 def update_maintenance_status():
     """Update maintenance task status from 'scheduled' to 'Scheduled'"""
@@ -1618,6 +1797,11 @@ def inspection():
                     }
                     for row in result.mappings()
                 ][::100]
+            # Start background chart generation
+            if machine_id:
+                Thread(target=background_chart_generation, args=(machine_id, sensor_type, machine_name)).start()
+                print(f"🔄 Started background chart generation for machine_id={machine_id}")
+            
             return jsonify({
                 "title": f"{machine_name or 'Machine'} - Current Sensor Data",
                 "x_label": "Time",
@@ -1642,6 +1826,11 @@ def inspection():
                     for row in result.mappings()
                 ][::4]  # Downsample if needed
 
+            # Start background chart generation
+            if machine_id:
+                Thread(target=background_chart_generation, args=(machine_id, sensor_type, machine_name)).start()
+                print(f"🔄 Started background chart generation for machine_id={machine_id}")
+            
             return jsonify({
                 "title": f"{machine_name or 'Machine'} - Vibration Sensor Data",
                 "x_label": "Time",
@@ -2112,6 +2301,149 @@ def get_daily_image_summary():
     except Exception as e:
         print("❌ Exception:", e)
         return jsonify({"error": str(e)}), 500
+
+
+@log_time
+@app.route('/generate-chart', methods=['POST'])
+def generate_chart():
+    """Generate matplotlib chart and trigger OpenAI vision analysis"""
+    try:
+        data = request.get_json()
+        machine_id = data.get('machine_id')
+        sensor_type = data.get('sensor_type', 'Vibration')
+        machine_name = data.get('machine_name', 'Machine')
+        
+        if not machine_id:
+            return jsonify({"error": "machine_id is required"}), 400
+        
+        print(f"🎯 Generating chart for machine_id={machine_id}, sensor_type={sensor_type}")
+        
+        # Check if chart already exists
+        with engine.connect() as conn:
+            existing_result = conn.execute(
+                select(machine_anomaly_screenshots).where(
+                    and_(
+                        machine_anomaly_screenshots.c.machine_id == machine_id,
+                        machine_anomaly_screenshots.c.sensor_type == sensor_type
+                    )
+                )
+            )
+            existing_row = existing_result.fetchone()
+            
+            if existing_row:
+                print(f"✅ Chart already exists for machine_id={machine_id}, sensor_type={sensor_type}")
+                return jsonify({
+                    "message": "Chart already exists",
+                    "screenshot_id": str(existing_row.id),
+                    "analysis_id": existing_row.analysis_id,
+                    "chart_title": existing_row.chart_title
+                }), 200
+        
+        # Generate matplotlib chart
+        chart_base64 = generate_chart_image(machine_id, sensor_type, machine_name)
+        if not chart_base64:
+            return jsonify({"error": "Failed to generate chart"}), 500
+        
+        # Convert base64 to binary data
+        chart_binary = base64.b64decode(chart_base64)
+        
+        # Save chart to database
+        chart_title = f'{machine_name or "Machine"} - {sensor_type} Sensor Data'
+        with engine.connect() as conn:
+            insert_stmt = insert(machine_anomaly_screenshots).values(
+                machine_id=machine_id,
+                sensor_type=sensor_type,
+                screenshot_data=chart_binary,
+                screenshot_url=f"chart_{machine_id}_{sensor_type}_{int(time.time())}.png",
+                chart_title=chart_title
+            )
+            
+            result = conn.execute(insert_stmt)
+            screenshot_id = result.inserted_primary_key[0]
+            conn.commit()
+            
+            print(f"✅ Chart saved with ID: {screenshot_id}")
+            
+            # Trigger OpenAI vision analysis
+            print(f"🤖 Triggering OpenAI vision analysis for chart...")
+            
+            try:
+                # Call OpenAI Vision API with the base64 image
+                response = openai.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text", 
+                                "text": f"""Analyze this machine anomaly graph titled "{chart_title}" showing {sensor_type} sensor data for {machine_name or "Machine"} (ID: {machine_id}). 
+
+Please provide a comprehensive analysis including:
+
+1. **Graph Overview**: Describe what you see in the chart - data patterns, trends, and overall behavior
+2. **Anomaly Detection**: Identify any anomalies, spikes, or unusual patterns in the data
+3. **Root Cause Analysis**: Provide 5 likely causes for any detected anomalies with detailed explanations
+4. **Severity Assessment**: Rate the severity of issues (Low/Medium/High/Critical)
+5. **Recommended Actions**: Specific maintenance or troubleshooting steps to address the issues
+6. **Preventive Measures**: Suggestions to prevent similar issues in the future
+
+Focus on actionable insights that would help maintenance technicians understand and resolve the machine issues."""
+                            },
+                            {
+                                "type": "image_url", 
+                                "image_url": {"url": f"data:image/png;base64,{chart_base64}"}
+                            }
+                        ]
+                    }],
+                    max_tokens=1500
+                )
+                
+                analysis_text = response.choices[0].message.content
+                print(f"✅ OpenAI vision analysis completed")
+                
+                # Save analysis to machine_vision_analysis table
+                analysis_insert = insert(machine_vision_analysis).values(
+                    machine_id=machine_id,
+                    image_path=f"chart_{machine_id}_{sensor_type}_{int(time.time())}.png",
+                    analysis_text=analysis_text,
+                    sensor_type=sensor_type
+                )
+                
+                analysis_result = conn.execute(analysis_insert)
+                analysis_id = analysis_result.inserted_primary_key[0]
+                conn.commit()
+                
+                # Update screenshot record with analysis_id
+                update_stmt = update(machine_anomaly_screenshots).where(
+                    machine_anomaly_screenshots.c.id == screenshot_id
+                ).values(analysis_id=analysis_id)
+                
+                conn.execute(update_stmt)
+                conn.commit()
+                
+                print(f"✅ Analysis saved with ID: {analysis_id} and linked to chart")
+                
+                return jsonify({
+                    "message": "Chart generated and analysis completed",
+                    "screenshot_id": screenshot_id,
+                    "analysis_id": analysis_id,
+                    "chart_title": chart_title,
+                    "analysis_preview": analysis_text[:200] + "..." if len(analysis_text) > 200 else analysis_text
+                }), 200
+                
+            except Exception as analysis_error:
+                print(f"❌ Error during OpenAI analysis: {analysis_error}")
+                # Still return success for chart generation, but note analysis failed
+                return jsonify({
+                    "message": "Chart generated but analysis failed",
+                    "screenshot_id": screenshot_id,
+                    "error": str(analysis_error)
+                }), 200
+                
+    except Exception as e:
+        print(f"❌ Error in generate_chart: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5001)
