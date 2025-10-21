@@ -130,12 +130,15 @@ def after_request(response):
 
 
 # Set the OpenAI API key from environment variable
-openai.api_key = os.getenv('OPENAI_API_KEY', "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")
+openai.api_key = os.getenv('OPENAI_API_KEY')
+if not openai.api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is required")
 
 # Create the PostgreSQL engine with SQL logging
-# Switched to AWS RDS Cloud Database
 # Use environment variable for database URL (for Replit deployment)
-DATABASE_URL = os.getenv('DATABASE_URL', "postgresql+psycopg2://postgres:yourpassword@3.90.156.11:5432/postgres")
+DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is required")
 engine = create_engine(
     DATABASE_URL,
     echo=False,  # Disable verbose logging in production
@@ -2471,6 +2474,6 @@ def serve_react_app(path):
 
 
 if __name__ == '__main__':
-    # Use port from environment variable (Replit) or default to 5001
-    port = int(os.getenv('PORT', 5001))
+    # Use port from environment variable (Replit) or default to 5000
+    port = int(os.getenv('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
