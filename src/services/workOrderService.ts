@@ -39,7 +39,9 @@ export interface WorkOrderData {
   }>;
 }
 
-const API_URL = 'http://localhost:5001';
+// For Replit deployment: Use empty string (same origin)
+// For local development: Use 'http://localhost:5001'
+const API_URL = import.meta.env.PROD ? '' : 'http://localhost:5001';
 
 export async function submitWorkOrder(workOrderData: WorkOrderData, machineId?: string): Promise<any> {
   console.log('Submitting work order data:', workOrderData);

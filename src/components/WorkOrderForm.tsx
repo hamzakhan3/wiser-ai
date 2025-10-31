@@ -218,7 +218,8 @@ export const WorkOrderForm = ({ onClose, onSubmit, machineId }: WorkOrderFormPro
       
       console.log('WorkOrderForm - Request payload:', JSON.stringify(requestPayload, null, 2));
       
-      const response = await fetch('http://localhost:5001/query', {
+      const API_URL = import.meta.env.PROD ? '' : 'http://localhost:5001';
+      const response = await fetch(`${API_URL}/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -264,7 +265,8 @@ export const WorkOrderForm = ({ onClose, onSubmit, machineId }: WorkOrderFormPro
         machine_id: machineId
       };
       
-      const response = await fetch('http://localhost:5001/work-order', {
+      const API_URL = import.meta.env.PROD ? '' : 'http://localhost:5001';
+      const response = await fetch(`${API_URL}/work-order`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

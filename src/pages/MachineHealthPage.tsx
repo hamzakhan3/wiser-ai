@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
-// Use localhost for local development
-const API_URL = 'http://localhost:5001';
+// For Replit deployment: Use empty string (same origin)
+// For local development: Use 'http://localhost:5001'
+const API_URL = import.meta.env.PROD ? '' : 'http://localhost:5001';
 
 // Debug: Log the current hostname
 console.log('Current hostname:', window.location.hostname);
