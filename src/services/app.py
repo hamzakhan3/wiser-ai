@@ -140,31 +140,27 @@ def print_startup_info():
     """Print startup information including Replit URL"""
     port = int(os.getenv('PORT', 5000))
     
-    # Detect Replit environment and get URL
-    replit_url = None
-    if os.getenv('REPLIT_DEV'):
-        replit_url = os.getenv('REPLIT_DEV')
-    elif os.getenv('REPL_SLUG') and os.getenv('REPL_OWNER'):
-        repl_slug = os.getenv('REPL_SLUG')
-        repl_owner = os.getenv('REPL_OWNER')
-        replit_url = f"https://{repl_slug}.{repl_owner}.replit.dev"
-    elif os.getenv('REPL_ID'):
-        repl_id = os.getenv('REPL_ID')
-        replit_url = f"https://{repl_id}.id.replit.dev"
+    # Detect Replit environment
+    is_replit = bool(os.getenv('REPL_SLUG') or os.getenv('REPL_ID') or os.getenv('REPLIT_DEV'))
+    
+    # Try to get Replit URL from environment (Replit may not always provide it)
+    replit_url = os.getenv('REPLIT_DEV')  # Replit sometimes sets this
     
     print("\n" + "="*70)
     print("🚀 Wiser AI Flask App Initialized")
     print("="*70)
     
-    if replit_url:
-        print(f"🌐 Replit URL: {replit_url}")
-        print(f"📡 Local URL:  http://0.0.0.0:{port}")
+    if is_replit:
+        print(f"📡 Server running on port: {port}")
+        if replit_url:
+            print(f"🌐 Replit URL: {replit_url}")
+        else:
+            print("🌐 Replit URL: Check your Replit webview (top of the preview panel)")
+            print("   ↳ Your URL should look like: https://XXXXX-XXXXX.worf.replit.dev")
+        print("   ↳ The URL is displayed in your Replit webview above the app")
     else:
         print(f"📡 Server running on: http://0.0.0.0:{port}")
         print(f"🔗 Local access: http://localhost:{port}")
-        if os.getenv('REPL_SLUG') or os.getenv('REPL_ID'):
-            print("⚠️  Note: Could not detect Replit URL automatically")
-            print("   Check your Replit webview for the actual URL")
     
     print(f"📁 Static folder: {app.static_folder}")
     print(f"✅ React build found: {os.path.exists(os.path.join(app.static_folder, 'index.html')) if app.static_folder else False}")
