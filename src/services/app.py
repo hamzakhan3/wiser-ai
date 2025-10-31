@@ -114,7 +114,25 @@ llm = OpenAI(temperature=0.1, model="gpt-3.5-turbo")
 from flask_cors import CORS
 
 # Initialize Flask app with static folder for React build
-app = Flask(__name__, static_folder='../../dist', static_url_path='')
+# Try different paths for Replit vs local
+dist_paths = [
+    os.path.join(os.path.dirname(__file__), '../../dist'),  # From src/services/
+    os.path.join(os.getcwd(), 'dist'),  # From project root
+    'dist',  # Current directory
+]
+static_folder = None
+for path in dist_paths:
+    full_path = os.path.abspath(path)
+    if os.path.exists(full_path) and os.path.exists(os.path.join(full_path, 'index.html')):
+        static_folder = full_path
+        print(f"✓ Found React build at: {static_folder}")
+        break
+
+if static_folder is None:
+    print("⚠️ WARNING: dist folder not found! Make sure to run 'npm run build'")
+    static_folder = os.path.join(os.getcwd(), 'dist')  # Default fallback
+
+app = Flask(__name__, static_folder=static_folder, static_url_path='')
 CORS(app, resources={r"/*": {"origins": "*"}}) # Enable CORS for all routes
 
 @app.before_request
@@ -145,11 +163,29 @@ engine = create_engine(
     echo_pool=False  # Disable connection pool logging in production
 )
 
-# Define machine_vision_analysis table
+# Define machine_vision_analysis table - only if it exists
 metadata = MetaData()
-metadata.reflect(bind=engine)
-machine_vision_analysis = Table('machine_vision_analysis', metadata, autoload_with=engine)
-machine_anomaly_screenshots = Table('machine_anomaly_screenshots', metadata, autoload_with=engine)
+from sqlalchemy import inspect
+inspector = inspect(engine)
+
+# Only load tables if they exist
+machine_vision_analysis = None
+machine_anomaly_screenshots = None
+
+if inspector.has_table('machine_vision_analysis'):
+    metadata.reflect(bind=engine, only=['machine_vision_analysis'])
+    machine_vision_analysis = Table('machine_vision_analysis', metadata, autoload_with=engine)
+    print("✓ Loaded machine_vision_analysis table")
+else:
+    print("⚠️ machine_vision_analysis table not found - skipping")
+
+if inspector.has_table('machine_anomaly_screenshots'):
+    if machine_vision_analysis is None:
+        metadata.reflect(bind=engine, only=['machine_anomaly_screenshots'])
+    machine_anomaly_screenshots = Table('machine_anomaly_screenshots', metadata, autoload_with=engine)
+    print("✓ Loaded machine_anomaly_screenshots table")
+else:
+    print("⚠️ machine_anomaly_screenshots table not found - skipping")
 
 # Create the SQL database object
 sql_database = SQLDatabase(engine)
@@ -2461,16 +2497,55 @@ Focus on actionable insights that would help maintenance technicians understand 
 # These routes serve the React frontend from the dist/ folder
 # This allows Replit to serve both frontend and backend from one container
 
+# Health check endpoints
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "ok",
+        "static_folder": app.static_folder,
+        "static_exists": os.path.exists(app.static_folder) if app.static_folder else False,
+        "index_exists": os.path.exists(os.path.join(app.static_folder, 'index.html')) if app.static_folder else False
+    })
+
+@app.route('/api/status')
+def api_status():
+    """API status check"""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            db_ok = result.scalar() == 1
+        return jsonify({
+            "status": "ok",
+            "database": "connected" if db_ok else "error"
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "database": "disconnected",
+            "error": str(e)
+        }), 500
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_react_app(path):
     """Serve React static files and handle client-side routing"""
+    # Skip API routes
+    if path.startswith('api/') or path.startswith('health'):
+        return jsonify({"error": "Not found"}), 404
+    
     # If requesting a specific file that exists, serve it
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+    if path != "" and app.static_folder and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     # Otherwise, serve index.html for client-side routing
-    else:
+    elif app.static_folder and os.path.exists(os.path.join(app.static_folder, 'index.html')):
         return send_from_directory(app.static_folder, 'index.html')
+    else:
+        return jsonify({
+            "error": "React build not found",
+            "static_folder": app.static_folder,
+            "message": "Please run 'npm run build' to create the dist folder"
+        }), 500
 
 
 if __name__ == '__main__':
