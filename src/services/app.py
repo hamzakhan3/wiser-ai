@@ -135,6 +135,55 @@ if static_folder is None:
 app = Flask(__name__, static_folder=static_folder, static_url_path='')
 CORS(app, resources={r"/*": {"origins": "*"}}) # Enable CORS for all routes
 
+# Print startup info (works for both direct run and gunicorn)
+def print_startup_info():
+    """Print startup information including Replit URL"""
+    port = int(os.getenv('PORT', 5000))
+    
+    # Detect Replit environment and get URL
+    replit_url = None
+    if os.getenv('REPLIT_DEV'):
+        replit_url = os.getenv('REPLIT_DEV')
+    elif os.getenv('REPL_SLUG') and os.getenv('REPL_OWNER'):
+        repl_slug = os.getenv('REPL_SLUG')
+        repl_owner = os.getenv('REPL_OWNER')
+        replit_url = f"https://{repl_slug}.{repl_owner}.replit.dev"
+    elif os.getenv('REPL_ID'):
+        repl_id = os.getenv('REPL_ID')
+        replit_url = f"https://{repl_id}.id.replit.dev"
+    
+    print("\n" + "="*70)
+    print("🚀 Wiser AI Flask App Initialized")
+    print("="*70)
+    
+    if replit_url:
+        print(f"🌐 Replit URL: {replit_url}")
+        print(f"📡 Local URL:  http://0.0.0.0:{port}")
+    else:
+        print(f"📡 Server running on: http://0.0.0.0:{port}")
+        print(f"🔗 Local access: http://localhost:{port}")
+        if os.getenv('REPL_SLUG') or os.getenv('REPL_ID'):
+            print("⚠️  Note: Could not detect Replit URL automatically")
+            print("   Check your Replit webview for the actual URL")
+    
+    print(f"📁 Static folder: {app.static_folder}")
+    print(f"✅ React build found: {os.path.exists(os.path.join(app.static_folder, 'index.html')) if app.static_folder else False}")
+    
+    # Check database and API key
+    try:
+        db_status = f"✓ Connected: {DATABASE_URL[:50]}..." if DATABASE_URL else "❌ Not set"
+    except NameError:
+        db_status = "❌ Not initialized yet"
+    
+    try:
+        api_key_status = "✓ Set" if openai.api_key else "❌ Missing"
+    except (NameError, AttributeError):
+        api_key_status = "❌ Not initialized yet"
+    
+    print(f"🔑 Database: {db_status}")
+    print(f"🤖 OpenAI API key: {api_key_status}")
+    print("="*70 + "\n")
+
 @app.before_request
 def log_request_info():
     print(f"📡 Incoming request: {request.method} {request.url}")
@@ -162,6 +211,9 @@ engine = create_engine(
     echo=False,  # Disable verbose logging in production
     echo_pool=False  # Disable connection pool logging in production
 )
+
+# Print startup info after database and API key are set
+print_startup_info()
 
 # Define machine_vision_analysis table - only if it exists
 metadata = MetaData()
@@ -2551,4 +2603,9 @@ def serve_react_app(path):
 if __name__ == '__main__':
     # Use port from environment variable (Replit) or default to 5000
     port = int(os.getenv('PORT', 5000))
+    
+    print("\n" + "="*70)
+    print("🚀 Starting Flask Development Server...")
+    print("="*70 + "\n")
+    
     app.run(debug=True, host='0.0.0.0', port=port)
